@@ -1,0 +1,1212 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>TriaLens — Clinical SAR Intelligence</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+<style>
+:root {
+  --ink: #0e0d0b; --ink2: #3a3730; --ink3: #7a756e; --ink4: #b5b0a8;
+  --paper: #faf8f4; --paper2: #f3f0ea; --paper3: #ebe7de; --paper4: #ddd9cf;
+  --gold: #c8922a; --gold2: #e8a93a; --gold-bg: rgba(200,146,42,0.08); --gold-border: rgba(200,146,42,0.22);
+  --blue: #2a5f9e; --blue-bg: rgba(42,95,158,0.07); --blue-border: rgba(42,95,158,0.2);
+  --green: #2a7a52; --green-bg: rgba(42,122,82,0.08); --green-border: rgba(42,122,82,0.2);
+  --red: #c0392b; --red-bg: rgba(192,57,43,0.07); --red-border: rgba(192,57,43,0.2);
+  --violet: #6b4fa0; --violet-bg: rgba(107,79,160,0.07); --violet-border: rgba(107,79,160,0.2);
+  --shadow: 0 1px 3px rgba(14,13,11,0.08), 0 4px 12px rgba(14,13,11,0.05);
+  --shadow-lg: 0 4px 24px rgba(14,13,11,0.12), 0 1px 4px rgba(14,13,11,0.06);
+}
+*, *::before, *::after { margin: 0; padding: 0; box-sizing: border-box; }
+html { scroll-behavior: smooth; }
+body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 13.5px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
+
+/* ── TOPBAR ── */
+.topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 200; height: 56px; background: rgba(250,248,244,0.96); backdrop-filter: blur(20px); border-bottom: 1px solid var(--paper3); display: flex; align-items: center; padding: 0 32px; gap: 0; }
+.logo { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
+.logo-hex { width: 28px; height: 28px; background: var(--ink); clip-path: polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%); display: flex; align-items: center; justify-content: center; }
+.logo-hex span { color: var(--paper); font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 700; }
+.logo-text { display: flex; flex-direction: column; }
+.logo-name { font-size: 14px; font-weight: 700; color: var(--ink); letter-spacing: -0.4px; line-height: 1.1; }
+.logo-sub { font-family: 'IBM Plex Mono', monospace; font-size: 8px; color: var(--ink4); letter-spacing: 1.5px; text-transform: uppercase; }
+.sep { width: 1px; height: 24px; background: var(--paper3); margin: 0 24px; flex-shrink: 0; }
+.topnav { display: flex; align-items: center; gap: 2px; }
+.topnav-btn { padding: 6px 14px; border-radius: 6px; border: none; background: transparent; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 500; color: var(--ink3); cursor: pointer; transition: all .15s; white-space: nowrap; }
+.topnav-btn:hover { background: var(--paper2); color: var(--ink); }
+.topnav-btn.active { background: var(--ink); color: var(--paper); }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.pill { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1px; padding: 3px 10px; border-radius: 20px; text-transform: uppercase; }
+.pill-blue { background: var(--blue-bg); color: var(--blue); border: 1px solid var(--blue-border); }
+.pill-violet { background: var(--violet-bg); color: var(--violet); border: 1px solid var(--violet-border); }
+.pill-gold { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border); }
+
+/* ── PAGE WRAP ── */
+.page-wrap { margin-top: 56px; min-height: calc(100vh - 56px); }
+.view { display: none; animation: fadeIn 0.25s ease; padding-top: 56px; }
+.view.active { display: block; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
+
+/* ── SEARCH VIEW ── */
+.search-view { max-width: 1400px; margin: 0 auto; padding: 72px 48px 80px; }
+
+/* Hero */
+.hero { margin-bottom: 48px; }
+.hero-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 2.5px; color: var(--ink4); text-transform: uppercase; margin-bottom: 18px; }
+.hero-title { font-size: 46px; font-weight: 700; letter-spacing: -1.8px; line-height: 1.1; color: var(--ink); margin-bottom: 18px; }
+.hero-title em { font-style: normal; color: var(--gold); }
+.hero-sub { font-size: 15px; color: var(--ink3); max-width: 600px; line-height: 1.65; margin-bottom: 28px; }
+.hero-tags { display: flex; flex-wrap: wrap; gap: 7px; }
+.hero-tag { display: inline-flex; align-items: center; gap: 7px; padding: 6px 13px; border: 1px solid var(--paper3); border-radius: 20px; font-size: 12px; color: var(--ink3); background: #fff; }
+.tag-dot { width: 6px; height: 6px; border-radius: 50%; flex-shrink: 0; }
+
+/* Search box */
+.search-box { background: #fff; border: 1px solid var(--paper3); border-radius: 14px; padding: 24px 24px 20px; margin-bottom: 32px; box-shadow: var(--shadow); }
+.search-row { display: flex; gap: 10px; align-items: flex-end; margin-bottom: 16px; }
+.search-input-wrap { flex: 1; position: relative; }
+.search-input { width: 100%; background: var(--paper2); border: 1.5px solid var(--paper3); border-radius: 9px; padding: 12px 18px; font-family: 'Inter', sans-serif; font-size: 14.5px; color: var(--ink); outline: none; transition: border-color .2s, box-shadow .2s; }
+.search-input:focus { border-color: var(--ink); box-shadow: 0 0 0 3px rgba(14,13,11,.08); background: #fff; }
+.search-input::placeholder { color: var(--ink4); }
+.btn-search { background: var(--ink); color: var(--paper); border: none; padding: 12px 24px; border-radius: 9px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; white-space: nowrap; transition: background .15s, transform .1s; display: flex; align-items: center; gap: 8px; }
+.btn-search:hover { background: var(--ink2); transform: translateY(-1px); }
+.btn-search:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.quick-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 2px; color: var(--ink4); text-transform: uppercase; margin-bottom: 8px; }
+.quick-chips { display: flex; flex-wrap: wrap; gap: 7px; }
+.quick-chip { padding: 5px 13px; border: 1px solid var(--paper3); border-radius: 20px; font-size: 12px; color: var(--ink3); background: var(--paper2); cursor: pointer; transition: all .15s; font-family: 'Inter', sans-serif; }
+.quick-chip:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+
+/* API key row */
+.api-bar { display: none !important; }
+.api-label { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink4); letter-spacing: 1px; text-transform: uppercase; white-space: nowrap; }
+.api-input { flex: 1; background: #fff; border: 1px solid var(--paper3); border-radius: 6px; padding: 8px 12px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink); outline: none; transition: border-color .2s; }
+.api-input:focus { border-color: var(--ink); }
+.api-status { font-family: 'IBM Plex Mono', monospace; font-size: 10px; white-space: nowrap; }
+.api-ok { color: var(--green); }
+.api-missing { color: var(--ink4); }
+
+/* Loading overlay */
+.loading-overlay { position: fixed; inset: 0; background: rgba(250,248,244,0.95); z-index: 500; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 28px; backdrop-filter: blur(8px); opacity: 0; pointer-events: none; transition: opacity 0.3s; }
+.loading-overlay.active { opacity: 1; pointer-events: all; }
+.load-ring { width: 56px; height: 56px; border: 2px solid var(--paper3); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.9s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.load-title { font-size: 18px; font-weight: 600; color: var(--ink); letter-spacing: -0.3px; }
+.load-msg { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink3); }
+.load-bar-wrap { width: 280px; height: 2px; background: var(--paper3); border-radius: 2px; overflow: hidden; }
+.load-bar { height: 100%; background: var(--ink); border-radius: 2px; transition: width 0.5s ease; width: 0%; }
+
+/* Results */
+.results-hdr { display: flex; align-items: center; justify-content: space-between; margin-bottom: 24px; padding-bottom: 20px; border-bottom: 1px solid var(--paper3); }
+.results-hdr-left {}
+.results-eyebrow { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--ink4); letter-spacing: 2px; text-transform: uppercase; margin-bottom: 5px; }
+.results-title { font-size: 24px; font-weight: 700; color: var(--ink); letter-spacing: -0.6px; }
+.results-title em { font-style: normal; color: var(--blue); font-weight: 700; }
+.results-actions { display: flex; gap: 8px; align-items: center; }
+.btn-ghost { background: transparent; color: var(--ink2); border: 1px solid var(--paper3); padding: 8px 16px; border-radius: 7px; font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 500; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-ghost:hover { border-color: var(--ink); background: var(--paper2); color: var(--ink); }
+.btn-ink { background: var(--ink); color: var(--paper); border: none; padding: 8px 16px; border-radius: 7px; font-family: 'Inter', sans-serif; font-size: 12.5px; font-weight: 600; cursor: pointer; transition: background .15s; display: inline-flex; align-items: center; gap: 6px; }
+.btn-ink:hover { background: var(--ink2); }
+
+/* Metrics strip */
+.metrics-strip { display: grid; grid-template-columns: repeat(4,1fr); gap: 12px; margin-bottom: 28px; }
+.metric-card { background: #fff; border: 1px solid var(--paper3); border-radius: 10px; padding: 16px 18px; box-shadow: var(--shadow); position: relative; overflow: hidden; }
+.metric-card::before { content: ''; position: absolute; top: 0; left: 0; right: 0; height: 2px; }
+.mc-blue::before { background: var(--blue); }
+.mc-green::before { background: var(--green); }
+.mc-gold::before { background: var(--gold); }
+.mc-violet::before { background: var(--violet); }
+.mc-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink4); margin-bottom: 6px; }
+.mc-value { font-size: 26px; font-weight: 700; color: var(--ink); letter-spacing: -0.8px; line-height: 1; }
+.mc-sub { font-size: 11px; color: var(--ink4); margin-top: 3px; font-family: 'IBM Plex Mono', monospace; }
+
+/* Trial cards */
+.trials-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 2px; text-transform: uppercase; color: var(--ink4); margin-bottom: 12px; }
+.trial-card { background: #fff; border: 1px solid var(--paper3); border-radius: 12px; overflow: hidden; margin-bottom: 10px; box-shadow: var(--shadow); transition: border-color .2s; }
+.trial-card:hover { border-color: var(--paper4); }
+.trial-summary { padding: 18px 22px; cursor: pointer; display: flex; align-items: flex-start; gap: 16px; user-select: none; }
+.trial-summary:hover { background: var(--paper2); }
+.trial-expand-icon { flex-shrink: 0; width: 20px; height: 20px; border-radius: 50%; background: var(--paper2); border: 1px solid var(--paper3); display: flex; align-items: center; justify-content: center; margin-top: 2px; transition: all .2s; font-size: 9px; color: var(--ink3); }
+.trial-card.open .trial-expand-icon { background: var(--ink); color: var(--paper); border-color: var(--ink); transform: rotate(45deg); }
+.trial-main { flex: 1; min-width: 0; }
+.trial-id-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
+.trial-nct { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--blue); letter-spacing: .5px; }
+.trial-title-text { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; margin-bottom: 8px; }
+.trial-badges { display: flex; flex-wrap: wrap; gap: 5px; }
+.badge { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .5px; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; font-weight: 500; }
+.bd-blue   { background: var(--blue-bg);   color: var(--blue);   border: 1px solid var(--blue-border); }
+.bd-green  { background: var(--green-bg);  color: var(--green);  border: 1px solid var(--green-border); }
+.bd-gold   { background: var(--gold-bg);   color: var(--gold);   border: 1px solid var(--gold-border); }
+.bd-red    { background: var(--red-bg);    color: var(--red);    border: 1px solid var(--red-border); }
+.bd-violet { background: var(--violet-bg); color: var(--violet); border: 1px solid var(--violet-border); }
+.bd-gray   { background: var(--paper2); color: var(--ink3); border: 1px solid var(--paper3); }
+
+/* Trial detail */
+.trial-detail { border-top: 1px solid var(--paper3); background: var(--paper2); padding: 24px 40px; display: none; }
+.trial-card.open .trial-detail { display: block; animation: fadeIn 0.2s ease; }
+.detail-grid { display: grid; grid-template-columns: repeat(4,1fr); gap: 16px; margin-bottom: 20px; }
+.dg-item {}
+.dg-label { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink4); margin-bottom: 3px; }
+.dg-value { font-size: 13px; font-weight: 500; color: var(--ink); }
+.trial-summary-text { font-size: 13.5px; color: var(--ink3); line-height: 1.7; font-style: normal; background: #fff; border: 1px solid var(--paper3); border-radius: 8px; padding: 12px 16px; margin-bottom: 20px; }
+.trial-outcome { margin-bottom: 20px; }
+.outcome-label { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink4); margin-bottom: 4px; }
+.outcome-text { font-size: 13.5px; color: var(--ink2); }
+
+/* SAR section */
+.sar-section { background: #fff; border: 1px solid var(--paper3); border-radius: 10px; overflow: hidden; }
+.sar-trigger { padding: 16px 20px; display: flex; align-items: center; justify-content: space-between; }
+.btn-generate { background: var(--ink); color: var(--paper); border: none; padding: 10px 22px; border-radius: 8px; font-family: 'Inter', sans-serif; font-size: 13px; font-weight: 600; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 8px; }
+.btn-generate:hover { background: var(--ink2); transform: translateY(-1px); }
+.btn-generate:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+.sar-hint { font-size: 12px; color: var(--ink4); font-style: normal; }
+.sar-progress { padding: 32px; border-top: 1px solid var(--paper3); display: none; background: #fff; }
+.sar-progress.active { display: block; }
+.loader-wrap { display: flex; flex-direction: column; align-items: center; gap: 20px; }
+.loader-spinner { width: 36px; height: 36px; border: 3px solid var(--paper3); border-top-color: var(--ink); border-radius: 50%; animation: spin 0.8s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+.loader-step-label { font-family: 'IBM Plex Mono', monospace; font-size: 11px; letter-spacing: 1px; color: var(--ink3); text-transform: uppercase; }
+.loader-bar-track { width: 320px; max-width: 100%; height: 3px; background: var(--paper3); border-radius: 2px; overflow: hidden; }
+.loader-bar-fill { height: 3px; background: var(--ink); border-radius: 2px; transition: width 0.4s ease; }
+.skeleton-block { width: 100%; height: 14px; background: linear-gradient(90deg, var(--paper2) 25%, var(--paper3) 50%, var(--paper2) 75%); background-size: 200% 100%; border-radius: 4px; animation: shimmer 1.4s infinite; }
+.skeleton-block.tall { height: 80px; }
+.skeleton-block.short { width: 40%; }
+.skeleton-row { display: grid; grid-template-columns: 2fr 1fr 1fr 3fr; gap: 12px; margin-bottom: 10px; }
+@keyframes shimmer { 0%{background-position:200% 0} 100%{background-position:-200% 0} }
+@keyframes pulse { 0%,100%{opacity:1} 50%{opacity:0.4} }
+
+/* SAR results */
+.sar-results { border-top: 1px solid var(--paper3); display: none; }
+.sar-results.active { display: block; animation: fadeIn 0.3s ease; }
+.sar-disclaimer { padding: 10px 20px; background: var(--gold-bg); border-bottom: 1px solid var(--gold-border); font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .3px; color: var(--gold); display: flex; align-items: center; gap: 8px; }
+
+/* Tabs */
+.sar-tabs { border-bottom: 1px solid var(--paper3); display: flex; padding: 0 20px; gap: 0; background: var(--paper2); }
+.sar-tab { padding: 12px 18px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink3); cursor: pointer; border-bottom: 2px solid transparent; transition: all .15s; white-space: nowrap; }
+.sar-tab:hover { color: var(--ink); }
+.sar-tab.active { color: var(--ink); border-bottom-color: var(--ink); background: #fff; }
+/* Section label */
+.sec-lbl { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink4); padding-bottom: 10px; border-bottom: 1px solid var(--paper3); margin-bottom: 18px; }
+
+/* Data table */
+.data-table { width: 100%; border-collapse: collapse; font-size: 12.5px; }
+.data-table th { padding: 9px 12px; text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink4); background: var(--paper2); border-bottom: 1px solid var(--paper3); font-weight: 500; }
+.data-table td { padding: 11px 12px; border-bottom: 1px solid var(--paper2); vertical-align: middle; color: var(--ink2); }
+.data-table tr:last-child td { border-bottom: none; }
+.data-table tr:hover td { background: var(--paper2); }
+
+/* SAR tab layout — full-width stacked, no cramped grids */
+.sar-tab-content { padding: 32px 36px; display: none; }
+.sar-tab-content.active { display: block; animation: fadeIn 0.2s ease; }
+
+/* Chart — full width, fixed height */
+.chart-wrap { position: relative; background: var(--paper); border: 1px solid var(--paper3); border-radius: 10px; padding: 24px 24px 16px; margin-bottom: 24px; }
+.chart-wrap canvas { height: 180px !important; max-height: 180px; width: 100% !important; }
+
+/* Potency table */
+.potency-table { width: 100%; border-collapse: collapse; border-radius: 8px; overflow: hidden; }
+.potency-table th { padding: 8px 16px; text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink4); background: var(--paper2); border-bottom: 1px solid var(--paper3); font-weight: 500; }
+.potency-table td { padding: 14px 16px; border-bottom: 1px solid var(--paper2); vertical-align: middle; font-size: 13px; }
+.potency-table tr:last-child td { border-bottom: none; }
+.potency-table tr:hover td { background: var(--paper2); }
+.potency-table tr:hover td { background: var(--paper2); }
+.p-endpoint { font-size: 13px; font-weight: 600; color: var(--ink); }
+.p-value { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink2); }
+.p-unit { font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink3); }
+.p-assay { font-size: 12px; color: var(--ink4); line-height: 1.5; }
+
+/* Dose table */
+.dose-table { width: 100%; border-collapse: collapse; }
+.dose-table th { padding: 8px 16px; text-align: left; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink4); background: var(--paper2); border-bottom: 1px solid var(--paper3); font-weight: 500; }
+.dose-table td { padding: 14px 16px; border-bottom: 1px solid var(--paper2); vertical-align: middle; font-size: 13px; }
+.dose-table tr:last-child td { border-bottom: none; }
+.dose-table tr:hover td { background: var(--paper2); }
+.dose-table tr:hover td { background: var(--paper2); }
+.d-dose { font-family: 'IBM Plex Mono', monospace; font-size: 13px; font-weight: 600; color: var(--ink); }
+.d-rate { font-family: 'IBM Plex Mono', monospace; font-size: 13px; color: var(--ink2); }
+.d-notes { font-size: 12px; color: var(--ink4); line-height: 1.5; }
+
+/* ADMET score bars */
+.admet-score-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px; margin-bottom: 24px; }
+.admet-score-card { background: #fff; border: 1px solid var(--paper3); border-radius: 8px; padding: 14px 16px; }
+.admet-score-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1px; text-transform: uppercase; color: var(--ink4); margin-bottom: 8px; }
+.admet-score-bar-wrap { height: 6px; background: var(--paper3); border-radius: 3px; margin-bottom: 6px; }
+.admet-score-bar { height: 6px; border-radius: 3px; transition: width 0.6s ease; }
+.admet-score-bottom { display: flex; align-items: center; justify-content: space-between; }
+.admet-score-val { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--ink2); }
+.admet-row { display: grid; grid-template-columns: 180px 1fr auto 280px; gap: 16px; padding: 14px 16px; border-bottom: 1px solid var(--paper2); align-items: center; }
+.admet-row:last-child { border-bottom: none; }
+.admet-row:hover { background: var(--paper2); border-radius: 6px; }
+.admet-prop { font-size: 13px; font-weight: 600; color: var(--ink); }
+.admet-val-cell { display: flex; align-items: center; gap: 8px; font-family: 'IBM Plex Mono', monospace; font-size: 12px; color: var(--ink2); flex-wrap: wrap; }
+.admet-rating-cell { white-space: nowrap; }
+.admet-notes-cell { font-size: 12px; color: var(--ink4); line-height: 1.5; }
+.r-good { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; color: var(--green); }
+.r-mod  { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; color: var(--gold); }
+.r-poor { font-family: 'IBM Plex Mono', monospace; font-size: 11px; font-weight: 700; color: var(--red); }
+
+/* Stat summary cards (potency + dose tabs) */
+.stat-cards { display: grid; gap: 12px; margin-bottom: 20px; }
+.stat-cards-4 { grid-template-columns: repeat(4, 1fr); }
+.stat-cards-3 { grid-template-columns: repeat(3, 1fr); }
+.stat-card { background: #fff; border: 1px solid var(--paper3); border-radius: 8px; padding: 16px 18px; }
+.stat-card-label { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.2px; text-transform: uppercase; color: var(--ink4); margin-bottom: 8px; }
+.stat-card-value { font-family: 'IBM Plex Mono', monospace; font-size: 24px; font-weight: 700; color: var(--ink); line-height: 1; margin-bottom: 4px; }
+.stat-card-sub { font-size: 11px; color: var(--ink4); margin-bottom: 10px; }
+.stat-card-bar-wrap { height: 4px; background: var(--paper3); border-radius: 2px; }
+.stat-card-bar { height: 4px; border-radius: 2px; }
+
+/* Narrative */
+.sar-narrative { font-size: 15px; line-height: 1.85; color: var(--ink2); padding: 28px 32px; background: #fff; border: 1px solid var(--paper3); border-left: 3px solid var(--violet); border-radius: 8px; }
+.narrative-actions { margin-top: 16px; display: flex; gap: 8px; }
+
+/* Section label */
+.sec-lbl { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink4); margin-bottom: 16px; }
+
+/* Saved view */
+.saved-view, .about-view { max-width: 1400px; margin: 0 auto; padding: 72px 48px 80px; }
+.page-hdr { margin-bottom: 32px; }
+.page-hdr-title { font-size: 28px; font-weight: 700; color: var(--ink); letter-spacing: -0.8px; margin-bottom: 5px; }
+.page-hdr-title em { font-style: normal; color: var(--blue); font-weight: 700; }
+.page-hdr-sub { font-size: 14px; color: var(--ink3); }
+.empty-state { text-align: center; padding: 80px 0; color: var(--ink4); }
+.empty-icon { font-size: 40px; margin-bottom: 16px; opacity: .3; }
+.empty-title { font-size: 18px; font-weight: 600; color: var(--ink3); margin-bottom: 6px; }
+.empty-sub { font-size: 13px; }
+.saved-card { background: #fff; border: 1px solid var(--paper3); border-radius: 12px; padding: 20px 24px; margin-bottom: 10px; box-shadow: var(--shadow); display: flex; align-items: center; justify-content: space-between; }
+.sc-info {}
+.sc-name { font-size: 16px; font-weight: 700; color: var(--ink); margin-bottom: 4px; }
+.sc-meta { font-family: 'IBM Plex Mono', monospace; font-size: 10px; color: var(--ink4); }
+.sc-actions { display: flex; gap: 8px; }
+
+/* About cards */
+.about-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+.about-card { background: #fff; border: 1px solid var(--paper3); border-radius: 12px; padding: 22px 24px; box-shadow: var(--shadow); }
+.about-card-title { display: flex; align-items: center; gap: 8px; font-size: 13px; font-weight: 700; color: var(--ink); margin-bottom: 12px; }
+.about-card-title::before { content: ''; width: 3px; height: 14px; border-radius: 2px; flex-shrink: 0; }
+.ac-blue::before { background: var(--blue); }
+.ac-green::before { background: var(--green); }
+.ac-violet::before { background: var(--violet); }
+.ac-gold::before { background: var(--gold); }
+.about-card p { font-size: 13px; color: var(--ink3); line-height: 1.75; }
+.about-card p b { color: var(--ink); font-weight: 600; }
+
+
+/* ── DOWNLOAD BUTTON ── */
+.btn-download { background: transparent; color: var(--ink3); border: 1px solid var(--paper3); padding: 5px 12px; border-radius: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; letter-spacing: .5px; cursor: pointer; transition: all .15s; display: inline-flex; align-items: center; gap: 6px; text-transform: uppercase; }
+.btn-download:hover { border-color: var(--ink); color: var(--ink); background: var(--paper2); }
+
+/* Scrollbar */
+::-webkit-scrollbar { width: 5px; } ::-webkit-scrollbar-track { background: transparent; } ::-webkit-scrollbar-thumb { background: var(--paper4); border-radius: 3px; }
+
+/* Toast */
+.toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: var(--paper); padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); z-index: 999; transform: translateY(80px); opacity: 0; transition: all .3s; }
+.toast.show { transform: translateY(0); opacity: 1; }
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<header class="topbar">
+  <a class="logo" onclick="showView('search')">
+    <div class="logo-hex"><span>T</span></div>
+    <div class="logo-text">
+      <div class="logo-name">TriaLens</div>
+      <div class="logo-sub">Clinical Intelligence</div>
+    </div>
+  </a>
+  <div class="sep"></div>
+  <nav class="topnav">
+    <button class="topnav-btn active" id="nav-search" onclick="showView('search')">Search Trials</button>
+    <button class="topnav-btn" id="nav-saved" onclick="showView('saved')">Saved Reports</button>
+    <button class="topnav-btn" id="nav-about" onclick="showView('about')">About</button>
+  </nav>
+  <div class="topbar-right">
+    <span class="pill pill-blue">ClinicalTrials.gov</span>
+    
+    <span class="pill pill-gold">AI · SAR</span>
+  </div>
+</header>
+
+<div class="page-wrap">
+
+<!-- ═══════════════ SEARCH VIEW ═══════════════ -->
+<div class="view active search-view" id="view-search">
+
+  <!-- API key bar -->
+  <div class="api-bar" id="api-bar">
+    <span class="api-label">API Key</span>
+    <input class="api-input" type="password" id="api-key-input" placeholder="Paste your Anthropic API key to begin (sk-ant-...)">
+    <span class="api-status api-missing" id="api-status">Not set</span>
+  </div>
+
+  <!-- Hero (hidden once results shown) -->
+  <div class="hero" id="hero-section">
+    <div class="hero-eyebrow">Clinical SAR Intelligence</div>
+    <div class="hero-title">Every trial.<br>Every compound.<br><em>SAR decoded.</em></div>
+    <div class="hero-sub">Search ClinicalTrials.gov and extract structured SAR intelligence — potency, dose-response, ADMET, and clinical narrative — in seconds.</div>
+    <div class="hero-tags">
+      <span class="hero-tag"><span class="tag-dot" style="background:var(--blue)"></span>ClinicalTrials.gov</span>
+      
+      <span class="hero-tag"><span class="tag-dot" style="background:var(--green)"></span>Potency Tables</span>
+      <span class="hero-tag"><span class="tag-dot" style="background:var(--gold)"></span>Dose-Response</span>
+      <span class="hero-tag"><span class="tag-dot" style="background:var(--red)"></span>ADMET Profiles</span>
+      <span class="hero-tag"><span class="tag-dot" style="background:var(--violet)"></span>SAR Narrative</span>
+    </div>
+  </div>
+
+  <!-- Search box -->
+  <div class="search-box">
+    <div class="search-row">
+      <div class="search-input-wrap">
+        <input class="search-input" type="text" id="search-input" placeholder="Enter compound name — e.g. Semaglutide, Osimertinib, Venetoclax…">
+      </div>
+      <button class="btn-search" id="search-btn" onclick="runSearch()">
+        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
+        Search
+      </button>
+    </div>
+    <div class="quick-label">Quick search</div>
+    <div class="quick-chips">
+      <span class="quick-chip" onclick="quickSearch('Semaglutide')">Semaglutide</span>
+      <span class="quick-chip" onclick="quickSearch('Osimertinib')">Osimertinib</span>
+      <span class="quick-chip" onclick="quickSearch('Venetoclax')">Venetoclax</span>
+      <span class="quick-chip" onclick="quickSearch('Palbociclib')">Palbociclib</span>
+      <span class="quick-chip" onclick="quickSearch('Pembrolizumab')">Pembrolizumab</span>
+      <span class="quick-chip" onclick="quickSearch('Imatinib')">Imatinib</span>
+    </div>
+  </div>
+
+  <!-- Results area -->
+  <div id="results-area" style="display:none;">
+    <div class="results-hdr">
+      <div class="results-hdr-left">
+        <div class="results-eyebrow">Clinical Trial Results</div>
+        <div class="results-title" id="results-title">Results for <em>Compound</em></div>
+      </div>
+      <div class="results-actions">
+        <button class="btn-ghost" onclick="clearResults()">← New Search</button>
+        <button class="btn-ink" onclick="saveCurrentReport()">
+          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M19 21H5a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h11l5 5v11a2 2 0 0 1-2 2z"/><polyline points="17,21 17,13 7,13 7,21"/><polyline points="7,3 7,8 15,8"/></svg>
+          Save Report
+        </button>
+      </div>
+    </div>
+    <div class="metrics-strip" id="metrics-strip"></div>
+    <div class="trials-label">Expand any trial to generate AI SAR analysis</div>
+    <div id="trials-list"></div>
+  </div>
+</div>
+
+<!-- ═══════════════ SAVED VIEW ═══════════════ -->
+<div class="view saved-view" id="view-saved">
+  <div class="page-hdr">
+    <div class="page-hdr-title">Saved <em>Reports</em></div>
+    <div class="page-hdr-sub">Your previously generated SAR reports</div>
+  </div>
+  <div id="saved-list">
+    <div class="empty-state">
+      <div class="empty-icon">📋</div>
+      <div class="empty-title">No saved reports yet</div>
+      <div class="empty-sub">Search for a compound and click Save Report</div>
+    </div>
+  </div>
+</div>
+
+<!-- ═══════════════ ABOUT VIEW ═══════════════ -->
+<div class="view about-view" id="view-about">
+  <div class="page-hdr">
+    <div class="page-hdr-title">About <em>TriaLens</em></div>
+    <div class="page-hdr-sub">Clinical SAR intelligence for drug discovery &amp; medicinal chemistry teams</div>
+  </div>
+  <div class="about-grid">
+    <div class="about-card">
+      <div class="about-card-title ac-blue">What is TriaLens?</div>
+      <p>Aggregates clinical trial data from <b>ClinicalTrials.gov</b>, then uses Claude AI to extract structured SAR content — potency profiles, dose-response curves, ADMET properties, and pharmacology narratives.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-card-title ac-green">Data Sources</div>
+      <p><b>ClinicalTrials.gov</b> — NIH/FDA global registry<br><br><b>Claude AI</b> — Anthropic claude-opus-4-5</p>
+    </div>
+    <div class="about-card">
+      <div class="about-card-title ac-violet">SAR Outputs</div>
+      <p><b>Potency & Efficacy</b> — IC50, EC50, Ki, Kd, clinical endpoints<br><br><b>Dose-Response</b> — cohort rates + toxicity grades<br><br><b>ADMET</b> — bioavailability, half-life, CYP, hERG, BBB<br><br><b>SAR Narrative</b> — clinical pharmacology summary</p>
+    </div>
+    <div class="about-card">
+      <div class="about-card-title ac-gold">Disclaimer</div>
+      <p>AI-synthesised content for <b>research reference only</b>. All SAR data is generated by AI and may contain inaccuracies. Verify against primary literature and regulatory filings before any decision-making use.</p>
+    </div>
+  </div>
+</div>
+
+</div><!-- page-wrap -->
+
+<!-- Loading overlay -->
+<div class="loading-overlay" id="loading-overlay">
+  <div class="load-ring"></div>
+  <div style="text-align:center;">
+    <div class="load-title" id="load-title">Searching clinical databases…</div>
+    <div class="load-msg" id="load-msg">Querying ClinicalTrials.gov</div>
+  </div>
+  <div class="load-bar-wrap"><div class="load-bar" id="load-bar"></div></div>
+</div>
+
+<!-- Toast -->
+<div class="toast" id="toast"></div>
+
+<script>
+// ── STATE ──────────────────────────────────────────────────────
+// Key lives server-side; use a placeholder so JS guards pass.
+// Actual API calls go through /api/claude proxy in serve.py
+let apiKey = (window.__TL_CONFIGURED__) ? 'server-proxy' : '';
+let currentCompound = '';
+let currentTrials = [];
+let sarCache = {};
+let savedReports = JSON.parse(localStorage.getItem('tl-saved') || '[]');
+let chartInstances = {};
+
+// ── API KEY ────────────────────────────────────────────────────
+const apiInput = document.getElementById('api-key-input');
+const apiStatus = document.getElementById('api-status');
+
+// If Streamlit injected a key, update the UI immediately
+if (window.__TL_CONFIGURED__) {
+  document.addEventListener('DOMContentLoaded', () => {
+    const bar = document.getElementById('api-bar');
+    if (bar) {
+      bar.innerHTML = `
+        <span class="api-label">API Key</span>
+        <span class="api-status api-ok" style="flex:1;">✓ Configured — ready to search</span>
+      `;
+    }
+  });
+}
+
+apiInput.addEventListener('input', () => {
+  apiKey = apiInput.value.trim();
+  if (apiKey.startsWith('sk-ant-') && apiKey.length > 20) {
+    apiStatus.textContent = '✓ Set'; apiStatus.className = 'api-status api-ok';
+  } else if (apiKey) {
+    apiStatus.textContent = 'Invalid format'; apiStatus.className = 'api-status api-missing';
+  } else {
+    apiStatus.textContent = 'Not set'; apiStatus.className = 'api-status api-missing';
+  }
+});
+
+document.getElementById('search-input').addEventListener('keydown', e => { if (e.key==='Enter') runSearch(); });
+
+// ── NAVIGATION ─────────────────────────────────────────────────
+function showView(v) {
+  document.querySelectorAll('.view').forEach(el => el.classList.remove('active'));
+  document.querySelectorAll('.topnav-btn').forEach(el => el.classList.remove('active'));
+  document.getElementById('view-'+v).classList.add('active');
+  document.getElementById('nav-'+v).classList.add('active');
+  if (v === 'saved') renderSaved();
+}
+
+// ── SEARCH ─────────────────────────────────────────────────────
+function quickSearch(q) { document.getElementById('search-input').value = q; runSearch(); }
+
+async function runSearch() {
+  if (!apiKey) { showToast('Please enter your Anthropic API key first.'); apiInput.focus(); return; }
+  const q = document.getElementById('search-input').value.trim();
+  if (!q) { showToast('Enter a compound name to search.'); return; }
+
+  currentCompound = q;
+  sarCache = {};
+  showLoading('Searching clinical databases…', 'Querying ClinicalTrials.gov', 20);
+
+  try {
+    let p = 20;
+    const iv = setInterval(() => { p = Math.min(p+15, 85); setLoadBar(p); }, 400);
+
+    const res = await fetch('/api/trials', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ compound: q })
+    });
+    const data = await res.json();
+    clearInterval(iv);
+
+    if (data.error) throw new Error(data.error);
+    if (!data.trials || data.trials.length === 0) throw new Error('No trials found for "' + q + '" on ClinicalTrials.gov');
+
+    setLoadBar(100);
+    await sleep(300);
+    hideLoading();
+    currentTrials = data.trials;
+    renderResults(q, data.trials);
+  } catch(e) {
+    hideLoading();
+    showToast('Search failed: ' + e.message);
+  }
+}
+
+// ── RENDER RESULTS ─────────────────────────────────────────────
+function renderResults(compound, trials) {
+  document.getElementById('hero-section').style.display = 'none';
+  const area = document.getElementById('results-area');
+  area.style.display = 'block';
+
+  document.getElementById('results-title').innerHTML = `Results for <em>${compound}</em>`;
+
+  // Metrics
+  const totalEnroll = trials.reduce((s,t) => s+(parseInt(t.enrollment)||0), 0);
+  const phases = [...new Set(trials.map(t=>t.phase).filter(Boolean))];
+  const sources = [...new Set(trials.map(t=>t.source).filter(Boolean))];
+  document.getElementById('metrics-strip').innerHTML = `
+    <div class="metric-card mc-blue"><div class="mc-label">Trials Found</div><div class="mc-value">${trials.length}</div><div class="mc-sub">across ${sources.length} source${sources.length>1?'s':''}</div></div>
+    <div class="metric-card mc-green"><div class="mc-label">Total Enrolled</div><div class="mc-value">${totalEnroll>0?totalEnroll.toLocaleString():'—'}</div><div class="mc-sub">participants</div></div>
+    <div class="metric-card mc-gold"><div class="mc-label">Phase Coverage</div><div class="mc-value" style="font-size:16px;letter-spacing:-.3px;">${phases.join(' · ')||'—'}</div><div class="mc-sub">&nbsp;</div></div>
+    <div class="metric-card mc-violet"><div class="mc-label">Data Sources</div><div class="mc-value">${sources.length}</div><div class="mc-sub">${sources.join(', ')}</div></div>`;
+
+  // Trial cards
+  const list = document.getElementById('trials-list');
+  list.innerHTML = trials.map((t,i) => renderTrialCard(t, i)).join('');
+}
+
+function statusBadge(s) {
+  const sl = (s||'').toLowerCase();
+  if (sl.includes('recruit')) return `<span class="badge bd-green">${s}</span>`;
+  if (sl.includes('complet')) return `<span class="badge bd-gray">${s}</span>`;
+  if (sl.includes('terminat')) return `<span class="badge bd-red">${s}</span>`;
+  if (sl.includes('active')) return `<span class="badge bd-gold">${s}</span>`;
+  return `<span class="badge bd-gray">${s}</span>`;
+}
+function phaseBadge(p) { return p ? `<span class="badge bd-blue">${p}</span>` : ''; }
+function sourceBadge(s) { return s ? `<span class="badge ${(s||'').toLowerCase().includes('ema') ? 'bd-violet' : 'bd-blue'}">${s}</span>` : ''; }
+
+function renderTrialCard(t, i) {
+  const cond = Array.isArray(t.conditions) ? t.conditions.join(', ') : (t.conditions||'');
+  const condBadge = cond ? `<span class="badge bd-gray">${cond.split(',')[0].trim().slice(0,40)}</span>` : '';
+  const enrollStr = t.enrollment ? parseInt(t.enrollment).toLocaleString() + ' participants' : '—';
+  return `
+  <div class="trial-card" id="trial-${i}">
+    <div class="trial-summary" onclick="toggleTrial(${i})">
+      <div class="trial-expand-icon" id="expand-${i}">+</div>
+      <div class="trial-main">
+        <div class="trial-id-row" style="display:flex;align-items:center;justify-content:space-between;">
+          <span class="trial-nct">${t.id||'N/A'}</span>
+          <button class="btn-download" onclick="event.stopPropagation();downloadTrial(${i})" title="Download full report">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+            Download
+          </button>
+        </div>
+        <div class="trial-title-text">${t.title||'Untitled'}</div>
+        <div class="trial-badges">
+          ${phaseBadge(t.phase)} ${statusBadge(t.status)} ${sourceBadge(t.source)} ${condBadge}
+        </div>
+      </div>
+    </div>
+    <div class="trial-detail" id="detail-${i}">
+      <div class="detail-grid">
+        <div class="dg-item"><div class="dg-label">Lead Sponsor</div><div class="dg-value">${t.sponsor||'—'}</div></div>
+        <div class="dg-item"><div class="dg-label">Enrollment</div><div class="dg-value">${enrollStr}</div></div>
+        <div class="dg-item"><div class="dg-label">Start Date</div><div class="dg-value">${t.startDate||'—'}</div></div>
+        <div class="dg-item"><div class="dg-label">Est. Completion</div><div class="dg-value">${t.completionDate||'—'}</div></div>
+      </div>
+      ${t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : ''}
+      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
+      <div class="sar-section" id="sar-section-${i}">
+        <div class="sar-trigger">
+          <button class="btn-generate" onclick="generateSAR(${i})" id="gen-btn-${i}">
+            Generate SAR Profile
+          </button>
+          <span class="sar-hint">Compiles real ChEMBL &amp; PubChem data with published literature citations</span>
+        </div>
+        <div class="sar-progress" id="sar-progress-${i}">
+          <div class="loader-wrap">
+            <div class="loader-spinner"></div>
+            <div class="loader-step-label" id="prog-label-${i}">Initialising…</div>
+            <div class="loader-bar-track"><div class="loader-bar-fill" id="prog-bar-${i}" style="width:0%"></div></div>
+            <div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
+              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
+              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
+            </div>
+          </div>
+        </div>
+        <div class="sar-results" id="sar-results-${i}"></div>
+      </div>
+    </div>
+  </div>`;
+}
+
+function toggleTrial(i) {
+  const card = document.getElementById('trial-'+i);
+  card.classList.toggle('open');
+}
+
+// ── SAR GENERATION ─────────────────────────────────────────────
+async function generateSAR(i) {
+  if (!apiKey) { showToast('Enter your API key first.'); return; }
+  const t = currentTrials[i];
+  const btn = document.getElementById('gen-btn-'+i);
+  const progressEl = document.getElementById('sar-progress-'+i);
+  btn.disabled = true;
+  progressEl.classList.add('active');
+
+  const steps = ['Fetching ChEMBL bioactivity data', 'Fetching PubChem properties', 'Cross-referencing sources', 'Compiling structure-activity relationships', 'Writing SAR narrative'];
+  const labelEl = document.getElementById('prog-label-'+i);
+  const barEl = document.getElementById('prog-bar-'+i);
+
+  for (let j=0; j<steps.length; j++) {
+    if (labelEl) labelEl.textContent = steps[j];
+    if (barEl) barEl.style.width = ((j+1)/steps.length * 60) + '%';
+    await sleep(320);
+  }
+
+  try {
+    // Fetch real bioactivity data from ChEMBL + PubChem
+    const chemblRes = await fetch('/api/chembl', {
+      method: 'POST',
+      headers: {'Content-Type': 'application/json'},
+      body: JSON.stringify({ compound: currentCompound })
+    });
+    const realData = await chemblRes.json();
+
+    const bioLines = (realData.bioactivity || []).map(a =>
+      `${a.endpoint}: ${a.value} ${a.unit} [${a.assay||'binding assay'}] — ChEMBL ${realData.chembl_id}`
+    ).join('\n') || 'No ChEMBL bioactivity data found';
+
+    const pc = realData.physicochemical || {};
+    const pcLines = pc.mw ? [
+      `Molecular Weight: ${pc.mw} Da [PubChem CID ${pc.cid}]`,
+      `LogP (XLogP): ${pc.logp ?? 'N/A'} [PubChem]`,
+      `H-Bond Donors: ${pc.hbd ?? 'N/A'} [PubChem]`,
+      `H-Bond Acceptors: ${pc.hba ?? 'N/A'} [PubChem]`,
+      `Rotatable Bonds: ${pc.rotb ?? 'N/A'} [PubChem]`,
+      `TPSA: ${pc.tpsa ?? 'N/A'} Å² [PubChem]`,
+    ].join('\n') : 'No PubChem data found';
+
+    const sources = (realData.sources || []).join(', ') || 'Claude training data only';
+
+    const sar = await callClaude(
+      `You are synthesising a SAR report for ${currentCompound} using verified database sources.
+
+REAL BIOACTIVITY DATA (ChEMBL ${realData.chembl_id || 'not found'}):
+${bioLines}
+
+REAL PHYSICOCHEMICAL DATA (PubChem):
+${pcLines}
+
+CLINICAL TRIAL CONTEXT (ClinicalTrials.gov):
+Phase: ${t.phase}, Status: ${t.status}, Conditions: ${t.conditions}
+Primary Outcome: ${t.primaryOutcome}
+
+Generate a JSON object with EXACTLY these keys:
+- "potency_table": array of 4 objects {endpoint, value, unit, assay, source} — use real ChEMBL values where available; for values not from ChEMBL, cite the actual published source — e.g. "PMID 12345678", "J Med Chem 2019", "Nature 2020" — based on your knowledge of published literature for this compound; only use source="Claude AI" if you truly cannot cite a specific paper
+- "dose_response": array of 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes}
+- "admet": array of exactly 7 objects in this order: Oral Bioavailability, Half-life, Protein Binding, CYP3A4 Inhibition, hERG Liability, BBB Penetration, Renal Clearance — each {property, value, rating ("good"|"moderate"|"poor"), notes, source} — use PubChem physicochemical data to inform ratings, cite source as "PubChem" where derived from physicochemical data; for clinical/PK properties cite the actual paper e.g. "PMID 12345678" or "Clinical Pharmacology 2018" if known
+- "summary": 2-sentence SAR narrative citing actual sources used
+- "sources": array of source strings e.g. ["ChEMBL CHEMBL1234", "PubChem CID 5284", "ClinicalTrials.gov"]
+
+Return ONLY valid JSON.`,
+      'You are an expert medicinal chemist. Use provided real data as primary source. Return ONLY valid JSON, no markdown.'
+    );
+
+    sar._realData = realData;
+    sar._sources = sar.sources || [sources];
+    sarCache[i] = sar;
+    const barFinal = document.getElementById('prog-bar-'+i);
+    if (barFinal) barFinal.style.width = '100%';
+    await sleep(300);
+    progressEl.classList.remove('active');
+    renderSARResults(i, sar);
+  } catch(e) {
+    progressEl.classList.remove('active');
+    btn.disabled = false;
+    showToast('SAR generation failed: ' + e.message);
+  }
+}
+
+function renderSARResults(i, sar) {
+  const el = document.getElementById('sar-results-'+i);
+  el.innerHTML = `
+    <div class="sar-disclaimer">
+      ⚡ Sources: ${(sar._sources||['AI synthesis']).join(' · ')}
+      ${(sar._realData||{}).chembl_id ? `· <a href="https://www.ebi.ac.uk/chembl/compound_report_card/${sar._realData.chembl_id}" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:600;">ChEMBL ↗</a>` : ''}
+      ${(sar._realData||{}).pubchem_cid ? `· <a href="https://pubchem.ncbi.nlm.nih.gov/compound/${sar._realData.pubchem_cid}" target="_blank" style="color:var(--blue);text-decoration:none;font-weight:600;">PubChem ↗</a>` : ''}
+      · Verify against primary literature
+    </div>
+    <div class="sar-tabs">
+      <div class="sar-tab active" onclick="switchTab(${i}, 'potency', this)">Potency & Efficacy</div>
+      <div class="sar-tab" onclick="switchTab(${i}, 'dose', this)">Dose-Response</div>
+      <div class="sar-tab" onclick="switchTab(${i}, 'admet', this)">ADMET</div>
+      <div class="sar-tab" onclick="switchTab(${i}, 'narrative', this)">SAR Narrative</div>
+    </div>
+    <div class="sar-tab-content active" id="tab-${i}-potency">${renderPotency(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-dose">${renderDose(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-admet">${renderAdmet(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-narrative">${renderNarrative(i, sar)}</div>`;
+  el.classList.add('active');
+  setTimeout(() => { initPotencyChart(i, sar); initDoseChart(i, sar); initRadarChart(i, sar); }, 50);
+}
+
+function switchTab(i, tab, el) {
+  // Deactivate all tabs and content in this trial's SAR section
+  const container = document.getElementById('sar-results-'+i);
+  container.querySelectorAll('.sar-tab').forEach(t => t.classList.remove('active'));
+  container.querySelectorAll('.sar-tab-content').forEach(t => { t.classList.remove('active'); t.style.display = 'none'; });
+  // Activate selected
+  el.classList.add('active');
+  const content = document.getElementById('tab-'+i+'-'+tab);
+  if (content) { content.classList.add('active'); content.style.display = 'block'; }
+}
+
+function srcBadgeHtml(src) {
+  if (!src) return '';
+  const sc = src.toLowerCase().includes('pmid')||src.toLowerCase().includes('j med')||src.toLowerCase().includes('nature')||src.toLowerCase().includes('science')?'#c8922a':src.includes('ChEMBL')?'#2a5f9e':src.includes('PubChem')?'#2a7a52':'#6b4fa0';
+  return `<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${src}</span>`;
+}
+
+function renderPotency(i, sar) {
+  const rows = (sar.potency_table||[]);
+
+  // Find key values for summary cards
+  const findVal = (kw) => {
+    const r = rows.find(r=>(r.endpoint||'').toLowerCase().includes(kw.toLowerCase()));
+    return r ? { val: r.value, unit: r.unit } : null;
+  };
+  const primary = rows[0] || {};
+  const herg = findVal('hERG') || findVal('herg');
+  const selectivity = findVal('selectivity') || findVal('Selectivity');
+
+  // Build up to 4 summary cards from available data
+  const cardDefs = [
+    { label: primary.endpoint||'Primary Target', value: primary.value||'—', unit: primary.unit||'', sub: 'Primary endpoint', pct: 95, color: '#2a5f9e' },
+    herg ? { label: 'hERG IC50', value: herg.val, unit: herg.unit, sub: 'Cardiac safety', pct: 30, color: '#2a7a52' } : null,
+    selectivity ? { label: 'Selectivity', value: selectivity.val, unit: selectivity.unit, sub: 'vs. off-target', pct: 80, color: '#c8922a' } : null,
+    rows.length > 1 ? { label: 'Endpoints', value: rows.length, unit: '', sub: 'Total measured', pct: (rows.length/6)*100, color: '#6b4fa0' } : null,
+  ].filter(Boolean).slice(0,4);
+
+  const cards = cardDefs.map(c=>`
+    <div class="stat-card">
+      <div class="stat-card-label">${c.label}</div>
+      <div class="stat-card-value">${c.value}<span style="font-size:13px;font-weight:400;color:var(--ink3);margin-left:4px;">${c.unit}</span></div>
+      <div class="stat-card-sub">${c.sub}</div>
+      <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
+    </div>`).join('');
+
+  const tableRows = rows.map(r=>`
+    <tr>
+      <td class="p-endpoint">${r.endpoint||''}</td>
+      <td class="p-value">${r.value||''}</td>
+      <td class="p-unit">${r.unit||''}</td>
+      <td class="p-assay">${r.assay||''}</td>
+      <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="sec-lbl">Potency & Efficacy</div>
+    <div class="stat-cards stat-cards-4">${cards}</div>
+    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:#fff;">
+    <table class="potency-table">
+      <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Source</th></tr></thead>
+      <tbody>${tableRows}</tbody>
+    </table>
+    </div>`;
+}
+
+function renderDose(i, sar) {
+  const rows = (sar.dose_response||[]);
+  const gc = g => g<=1?'#2a7a52':g<=2?'#c8922a':'#c0392b';
+
+  // Summary cards
+  const maxResp = rows.length ? Math.max(...rows.map(r=>r.response_rate||0)) : 0;
+  const minResp = rows.length ? Math.min(...rows.map(r=>r.response_rate||0)) : 0;
+  const maxTox  = rows.length ? Math.max(...rows.map(r=>r.toxicity_grade||1)) : 1;
+  const topDose = rows.length ? rows[rows.length-1].dose||'—' : '—';
+  const toxLabel = maxTox<=1?'Low':maxTox<=2?'Moderate':'High';
+  const toxColor = gc(maxTox);
+
+  const cards = [
+    { label:'Max Response', value: maxResp+'%', unit:'', sub:'At highest dose', pct: maxResp, color:'#2a5f9e' },
+    { label:'Min Response', value: minResp+'%', unit:'', sub:'At lowest dose',  pct: minResp, color:'#2a7a52' },
+    { label:'Max Toxicity', value: toxLabel,    unit:'', sub:'Grade '+maxTox+' peak', pct:(maxTox/3)*100, color: toxColor },
+    { label:'Top Dose',     value: topDose,     unit:'', sub:'Highest tested',  pct: 90, color:'#6b4fa0' },
+  ].map(c=>`
+    <div class="stat-card">
+      <div class="stat-card-label">${c.label}</div>
+      <div class="stat-card-value">${c.value}<span style="font-size:13px;font-weight:400;color:var(--ink3);margin-left:4px;">${c.unit}</span></div>
+      <div class="stat-card-sub">${c.sub}</div>
+      <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
+    </div>`).join('');
+
+  const tableRows = rows.map(r=>`
+    <tr>
+      <td class="d-dose">${r.dose||''}</td>
+      <td class="d-rate">${r.response_rate||0}%</td>
+      <td>
+        <span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;padding:3px 10px;border-radius:4px;background:${gc(r.toxicity_grade||1)}12;color:${gc(r.toxicity_grade||1)};border:1px solid ${gc(r.toxicity_grade||1)}30;">
+          Grade ${r.toxicity_grade||1}
+        </span>
+      </td>
+      <td class="d-notes">${r.notes||''}</td>
+    </tr>`).join('');
+
+  return `
+    <div class="sec-lbl">Dose-Response</div>
+    <div class="stat-cards stat-cards-4">${cards}</div>
+    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:#fff;">
+      <table class="dose-table">
+        <thead><tr><th>Dose</th><th>Response Rate</th><th>Toxicity</th><th>Notes</th></tr></thead>
+        <tbody>${tableRows}</tbody>
+      </table>
+    </div>`;
+}
+
+function renderAdmet(i, sar) {
+  const rows = (sar.admet||[]);
+  const rmap = {good:3, moderate:2, poor:1};
+  const barColor = r => r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a';
+  const ri = r => r==='good'?'▲':r==='poor'?'▼':'●';
+  const rc = r => r==='good'?'r-good':r==='poor'?'r-poor':'r-mod';
+
+  // Top score cards — 4 per row (show first 8, covers all 7 properties)
+  const scorecards = rows.map(r => {
+    const pct = ((rmap[r.rating]||2)/3)*100;
+    const col = barColor(r.rating);
+    return `<div class="admet-score-card">
+      <div class="admet-score-label">${r.property||''}</div>
+      <div class="admet-score-bar-wrap"><div class="admet-score-bar" style="width:${pct}%;background:${col};"></div></div>
+      <div class="admet-score-bottom">
+        <span class="admet-score-val">${r.value||''}</span>
+        <span class="${rc(r.rating)}" style="font-size:10px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span>
+      </div>
+    </div>`;
+  }).join('');
+
+  // Detail rows
+  const admetRows = rows.map(r=>`
+    <div class="admet-row">
+      <div class="admet-prop">${r.property||''}</div>
+      <div class="admet-val-cell">${r.value||''} ${srcBadgeHtml(r.source)}</div>
+      <div class="admet-rating-cell"><span class="${rc(r.rating)}">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></div>
+      <div class="admet-notes-cell">${r.notes||''}</div>
+    </div>`).join('');
+
+  const hdr = `<div style="display:grid;grid-template-columns:180px 1fr auto 280px;gap:16px;padding:8px 16px;background:var(--paper2);border-radius:6px 6px 0 0;border:1px solid var(--paper3);border-bottom:none;">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Property</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Value</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Rating</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Notes</span>
+  </div>`;
+
+  return `
+    <div class="sec-lbl">ADMET Properties</div>
+    <div class="admet-score-grid">${scorecards}</div>
+    ${hdr}
+    <div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:#fff;">
+      ${admetRows}
+    </div>`;
+}
+
+function renderNarrative(i, sar) {
+  return `<div class="sec-lbl">SAR Narrative</div>
+    <div class="sar-narrative">${sar.summary||'No narrative generated.'}</div>
+    <div class="narrative-actions">
+      <button class="btn-ghost" onclick="downloadNarrative(${i})">
+        <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+        Download Report
+      </button>
+    </div>`;
+}
+
+// ── CHARTS ─────────────────────────────────────────────────────
+const COLORS = ['#2a5f9e','#2a7a52','#c8922a','#6b4fa0','#c0392b','#e8a93a'];
+
+function destroyChart(key) { if (chartInstances[key]) { chartInstances[key].destroy(); delete chartInstances[key]; } }
+
+function initPotencyChart(i, sar) {
+  destroyChart('p'+i);
+  const rows = (sar.potency_table||[]);
+  const nums = rows.map(r=>({ label:r.endpoint||'', val:parseFloat((r.value||'0').toString().replace(/[^0-9.]/g,''))||0, unit:r.unit||'' })).filter(r=>r.val>0);
+  if (!nums.length) return;
+  const ctx = document.getElementById('potency-chart-'+i);
+  if (!ctx) return;
+  chartInstances['p'+i] = new Chart(ctx, {
+    type:'bar', data:{ labels:nums.map(r=>r.label), datasets:[{ data:nums.map(r=>r.val), backgroundColor:COLORS.slice(0,nums.length), borderRadius:5, borderSkipped:false }] },
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{display:false}, tooltip:{callbacks:{label:ctx=>`${ctx.parsed.y} ${nums[ctx.dataIndex]?.unit||''}`}} }, scales:{ x:{grid:{color:'#ebe7de'},ticks:{font:{family:'IBM Plex Mono',size:10},color:'#7a756e',maxRotation:30}}, y:{grid:{color:'#ebe7de'},ticks:{font:{family:'IBM Plex Mono',size:10},color:'#7a756e'}} } }
+  });
+}
+
+function initDoseChart(i, sar) {
+  destroyChart('d'+i);
+  const dr = (sar.dose_response||[]);
+  if (!dr.length) return;
+  const ctx = document.getElementById('dose-chart-'+i);
+  if (!ctx) return;
+  chartInstances['d'+i] = new Chart(ctx, {
+    data:{ labels:dr.map(r=>r.dose||''), datasets:[
+      { type:'bar', label:'Response Rate (%)', data:dr.map(r=>r.response_rate||0), backgroundColor:COLORS.slice(0,dr.length), borderRadius:4, yAxisID:'y', order:2 },
+      { type:'line', label:'Toxicity Grade', data:dr.map(r=>r.toxicity_grade||1), borderColor:'#c0392b', backgroundColor:'rgba(192,57,43,0.1)', borderWidth:2, borderDash:[4,4], pointBackgroundColor:'#c0392b', pointRadius:5, yAxisID:'y1', order:1 }
+    ]},
+    options:{ responsive:true, maintainAspectRatio:false, plugins:{ legend:{labels:{font:{family:'IBM Plex Mono',size:10},color:'#7a756e',boxWidth:12}} }, scales:{ x:{grid:{color:'#ebe7de'},ticks:{font:{family:'IBM Plex Mono',size:10},color:'#7a756e'}}, y:{grid:{color:'#ebe7de'},ticks:{font:{family:'IBM Plex Mono',size:10},color:'#7a756e'},title:{display:true,text:'Response Rate (%)',font:{family:'IBM Plex Mono',size:9},color:'#b5b0a8'}}, y1:{position:'right',grid:{display:false},max:4,ticks:{font:{family:'IBM Plex Mono',size:10},color:'#c0392b',stepSize:1},title:{display:true,text:'Tox Grade',font:{family:'IBM Plex Mono',size:9},color:'#b5b0a8'}} } }
+  });
+}
+
+function initRadarChart(i, sar) {
+  destroyChart('r'+i);
+  const admet = (sar.admet||[]);
+  if (!admet.length) return;
+  const ctx = document.getElementById('radar-chart-'+i);
+  if (!ctx) return;
+  const rmap = {good:3,moderate:2,poor:1};
+  const scores = admet.map(r=>rmap[(r.rating||'moderate').toLowerCase()]||2);
+  chartInstances['r'+i] = new Chart(ctx, {
+    type:'radar', data:{ labels:admet.map(r=>r.property||''), datasets:[{ label:'ADMET Profile', data:scores, backgroundColor:'rgba(42,95,158,0.08)', borderColor:'#2a5f9e', borderWidth:2, pointBackgroundColor:scores.map(s=>s===3?'#2a7a52':s===1?'#c0392b':'#c8922a'), pointRadius:5, pointHoverRadius:7 }] },
+    options:{ responsive:true, maintainAspectRatio:false, scales:{ r:{ min:0, max:3, ticks:{stepSize:1,font:{family:'IBM Plex Mono',size:8},color:'#b5b0a8',callback:v=>['','Poor','Mod','Good'][v]||''}, grid:{color:'#ebe7de'}, pointLabels:{font:{family:'IBM Plex Mono',size:9},color:'#7a756e'}, angleLines:{color:'#ebe7de'} } }, plugins:{ legend:{display:false} } }
+  });
+}
+
+// ── SAVED REPORTS ─────────────────────────────────────────────
+function saveCurrentReport() {
+  if (!currentTrials.length) { showToast('No results to save.'); return; }
+  const existing = savedReports.findIndex(r=>r.compound===currentCompound);
+  const report = { compound:currentCompound, trials:currentTrials, sar:sarCache, date:new Date().toLocaleDateString() };
+  if (existing>=0) savedReports[existing] = report; else savedReports.push(report);
+  localStorage.setItem('tl-saved', JSON.stringify(savedReports));
+  showToast(`Report for ${currentCompound} saved!`);
+}
+
+function renderSaved() {
+  const el = document.getElementById('saved-list');
+  if (!savedReports.length) {
+    el.innerHTML = `<div class="empty-state"><div class="empty-icon">📋</div><div class="empty-title">No saved reports yet</div><div class="empty-sub">Search for a compound and click Save Report</div></div>`;
+    return;
+  }
+  el.innerHTML = savedReports.map((r,i) => `
+    <div class="saved-card">
+      <div class="sc-info">
+        <div class="sc-name">${r.compound}</div>
+        <div class="sc-meta">${r.trials.length} trials · ${Object.keys(r.sar||{}).length} SAR profiles · Saved ${r.date}</div>
+      </div>
+      <div class="sc-actions">
+        <button class="btn-ghost" onclick="loadReport(${i})">Load Report</button>
+        <button class="btn-ghost" style="color:var(--red);border-color:var(--red-border);" onclick="deleteReport(${i})">Delete</button>
+      </div>
+    </div>`).join('');
+}
+
+function loadReport(i) {
+  const r = savedReports[i];
+  currentCompound = r.compound; currentTrials = r.trials; sarCache = r.sar||{};
+  document.getElementById('search-input').value = r.compound;
+  showView('search');
+  renderResults(r.compound, r.trials);
+  Object.keys(sarCache).forEach(idx => {
+    const el = document.getElementById('sar-results-'+idx);
+    if (el) renderSARResults(parseInt(idx), sarCache[idx]);
+  });
+}
+
+function deleteReport(i) {
+  savedReports.splice(i,1);
+  localStorage.setItem('tl-saved', JSON.stringify(savedReports));
+  renderSaved();
+  showToast('Report deleted.');
+}
+
+function downloadNarrative(i) {
+  const sar = sarCache[i]; if (!sar) return;
+  const blob = new Blob([sar.summary||''], {type:'text/plain'});
+  const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
+  a.download = `SAR_${currentCompound}_trial${i}.txt`; a.click();
+}
+
+function downloadTrial(i) {
+  const t = currentTrials[i];
+  const sar = sarCache[i];
+  const nct = t.id || 'NCT';
+  const cond = Array.isArray(t.conditions) ? t.conditions.join(', ') : (t.conditions||'');
+  const enroll = t.enrollment ? parseInt(t.enrollment).toLocaleString() + ' participants' : '—';
+  const date = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+
+  function badge(txt, color) {
+    const colors = {blue:'#2a5f9e',green:'#2a7a52',gold:'#c8922a',red:'#c0392b',violet:'#6b4fa0',gray:'#7a756e'};
+    const bgs    = {blue:'rgba(42,95,158,.08)',green:'rgba(42,122,82,.08)',gold:'rgba(200,146,42,.08)',red:'rgba(192,57,43,.07)',violet:'rgba(107,79,160,.07)',gray:'#f3f0ea'};
+    const bds    = {blue:'rgba(42,95,158,.2)',green:'rgba(42,122,82,.2)',gold:'rgba(200,146,42,.2)',red:'rgba(192,57,43,.2)',violet:'rgba(107,79,160,.2)',gray:'#ddd9cf'};
+    return `<span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.5px;padding:2px 8px;border-radius:3px;text-transform:uppercase;font-weight:500;background:${bgs[color]||bgs.gray};color:${colors[color]||colors.gray};border:1px solid ${bds[color]||bds.gray};">${txt}</span>`;
+  }
+
+  function ratingColor(r) { return r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a'; }
+  function ratingIcon(r)  { return r==='good'?'▲':r==='poor'?'▼':'●'; }
+
+  function tableHTML(headers, rows) {
+    const ths = headers.map(h=>`<th style="padding:9px 14px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#b5b0a8;background:#f3f0ea;border-bottom:1px solid #e8e4dc;font-weight:500;">${h}</th>`).join('');
+    const trs = rows.map(cells=>{
+      const tds = cells.map((c,ci)=>`<td style="padding:10px 14px;border-bottom:1px solid #f3f0ea;font-size:12.5px;color:${ci===0?'#0e0d0b':'#3a3730'};font-weight:${ci===0?'600':'400'};">${c}</td>`).join('');
+      return `<tr>${tds}</tr>`;
+    }).join('');
+    return `<table style="width:100%;border-collapse:collapse;background:#fff;border:1px solid #e8e4dc;border-radius:8px;overflow:hidden;"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
+  }
+
+  function section(title, accentColor, content) {
+    return `
+      <div style="margin-bottom:28px;">
+        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid #ebe7de;">
+          <div style="width:3px;height:14px;background:${accentColor};border-radius:2px;flex-shrink:0;"></div>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#b5b0a8;">${title}</span>
+        </div>
+        ${content}
+      </div>`;
+  }
+
+  function metaGrid(items) {
+    const cells = items.map(([label,val])=>`
+      <div style="padding:0 0 4px 0;">
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#b5b0a8;margin-bottom:3px;">${label}</div>
+        <div style="font-size:13px;font-weight:500;color:#0e0d0b;">${val}</div>
+      </div>`).join('');
+    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px 24px;">${cells}</div>`;
+  }
+
+  // ── SAR sections ──
+  let sarHTML = '';
+  if (sar) {
+    // Potency table
+    const potRows = (sar.potency_table||[]).map(r=>[r.endpoint||'', `<strong>${r.value||''}</strong>`, r.unit||'', `<span style="color:#b5b0a8;">${r.assay||''}</span>`]);
+    sarHTML += section('Potency & Efficacy', '#2a5f9e', tableHTML(['Endpoint','Value','Unit','Assay'], potRows));
+
+    // Dose-response table
+    const drRows = (sar.dose_response||[]).map(r=>[
+      r.dose||'',
+      `<strong>${r.response_rate||0}%</strong>`,
+      `<span style="color:#c8922a;">Grade ${r.toxicity_grade||1}</span>`,
+      `<span style="color:#b5b0a8;">${r.notes||''}</span>`
+    ]);
+    sarHTML += section('Dose-Response', '#2a7a52', tableHTML(['Dose','Response Rate','Toxicity Grade','Notes'], drRows));
+
+    // ADMET table
+    const admetRows = (sar.admet||[]).map(r=>[
+      r.property||'',
+      `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${r.value||''}</span>`,
+      `<span style="color:${ratingColor(r.rating)};font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;">${ratingIcon(r.rating)} ${(r.rating||'').toUpperCase()}</span>`,
+      `<span style="color:#b5b0a8;">${r.notes||''}</span>`
+    ]);
+    sarHTML += section('ADMET Properties', '#6b4fa0', tableHTML(['Property','Value','Rating','Notes'], admetRows));
+
+    // Narrative
+    sarHTML += section('SAR Narrative', '#c8922a', `<div style="background:#fff;border:1px solid #e8e4dc;border-left:3px solid #6b4fa0;border-radius:8px;padding:20px 24px;font-size:14px;line-height:1.8;color:#3a3730;">${sar.summary||'—'}</div>`);
+  } else {
+    sarHTML += section('SAR Profile', '#ddd9cf', `<div style="background:#f3f0ea;border:1px dashed #ddd9cf;border-radius:8px;padding:20px 24px;font-size:13px;color:#b5b0a8;font-family:'IBM Plex Mono',monospace;">SAR not yet generated. Open TriaLens, expand this trial and click Generate SAR Profile.</div>`);
+  }
+
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>TriaLens Report — ${currentCompound} · ${nct}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{margin:0;padding:0;box-sizing:border-box;}
+  body{background:#faf8f4;color:#0e0d0b;font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+  @media print{body{background:#fff;}.no-print{display:none!important;}}
+</style>
+</head>
+<body>
+<div style="max-width:960px;margin:0 auto;padding:48px 40px 80px;">
+
+  <!-- Header -->
+  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:40px;padding-bottom:24px;border-bottom:2px solid #0e0d0b;">
+    <div style="display:flex;align-items:center;gap:12px;">
+      <div style="width:32px;height:32px;background:#0e0d0b;clip-path:polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);display:flex;align-items:center;justify-content:center;">
+        <span style="color:#faf8f4;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;">T</span>
+      </div>
+      <div>
+        <div style="font-size:15px;font-weight:700;letter-spacing:-0.4px;">TriaLens</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#b5b0a8;letter-spacing:1.5px;text-transform:uppercase;">Clinical Intelligence Report</div>
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#b5b0a8;letter-spacing:1px;margin-bottom:3px;">GENERATED</div>
+      <div style="font-size:13px;font-weight:500;color:#0e0d0b;">${date}</div>
+    </div>
+  </div>
+
+  <!-- Title block -->
+  <div style="margin-bottom:32px;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#2a5f9e;letter-spacing:1px;margin-bottom:8px;">${nct}</div>
+    <div style="font-size:26px;font-weight:700;letter-spacing:-0.6px;color:#0e0d0b;line-height:1.2;margin-bottom:14px;">${t.title||'Untitled'}</div>
+    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
+      ${t.phase ? badge(t.phase,'blue') : ''}
+      ${t.status ? badge(t.status, t.status.toLowerCase().includes('complet')?'gray':t.status.toLowerCase().includes('recruit')?'green':'gold') : ''}
+      ${t.source ? badge(t.source, 'blue') : ''}
+      ${cond ? badge(cond.split(',')[0].trim(),'gray') : ''}
+    </div>
+  </div>
+
+  <!-- Trial metadata -->
+  ${section('Trial Overview', '#2a5f9e', metaGrid([
+    ['Compound', currentCompound],
+    ['Lead Sponsor', t.sponsor||'—'],
+    ['Enrollment', enroll],
+    ['Start Date', t.startDate||'—'],
+    ['Est. Completion', t.completionDate||'—'],
+    ['Condition(s)', cond||'—'],
+  ]) + (t.primaryOutcome ? `<div style="margin-top:16px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#b5b0a8;margin-bottom:5px;">Primary Outcome</div><div style="font-size:13.5px;color:#3a3730;">${t.primaryOutcome}</div></div>` : '')
+  + (t.summary ? `<div style="margin-top:14px;background:#fff;border:1px solid #e8e4dc;border-radius:8px;padding:12px 16px;font-size:13.5px;color:#7a756e;line-height:1.7;">${t.summary}</div>` : ''))}
+
+  <!-- SAR -->
+  ${sarHTML}
+
+  <!-- Footer -->
+  <div style="margin-top:48px;padding-top:20px;border-top:1px solid #ebe7de;display:flex;align-items:center;justify-content:space-between;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;letter-spacing:.5px;">AI-generated · Research reference only · Verify against primary literature</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;">TriaLens · trialens.ai</div>
+  </div>
+
+  <div class="no-print" style="margin-top:24px;text-align:center;">
+    <button onclick="window.print()" style="background:#0e0d0b;color:#faf8f4;border:none;padding:10px 24px;border-radius:8px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Print / Save as PDF</button>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], {type: 'text/html'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `TriaLens_${currentCompound}_${nct}.html`;
+  a.click();
+  showToast(`Downloaded report for ${nct}`);
+}
+
+function clearResults() {
+  document.getElementById('results-area').style.display = 'none';
+  document.getElementById('hero-section').style.display = 'block';
+  document.getElementById('search-input').value = '';
+  currentCompound = ''; currentTrials = []; sarCache = {};
+}
+
+// ── CLAUDE API ─────────────────────────────────────────────────
+async function callClaude(prompt, system) {
+  // Always route through local proxy — avoids CORS entirely
+  const res = await fetch('/api/claude', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ prompt, system, max_tokens: 3000 })
+  });
+  if (!res.ok) { const e = await res.json(); throw new Error(e.error || 'Server error'); }
+  const data = await res.json();
+  return data.result;
+}
+
+// ── HELPERS ────────────────────────────────────────────────────
+function showLoading(title, msg, pct) {
+  document.getElementById('load-title').textContent = title;
+  document.getElementById('load-msg').textContent = msg;
+  setLoadBar(pct);
+  document.getElementById('loading-overlay').classList.add('active');
+}
+function hideLoading() { document.getElementById('loading-overlay').classList.remove('active'); }
+function setLoadBar(pct) { document.getElementById('load-bar').style.width = pct+'%'; }
+function sleep(ms) { return new Promise(r=>setTimeout(r,ms)); }
+function showToast(msg) {
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.classList.add('show');
+  setTimeout(()=>t.classList.remove('show'), 3200);
+}
+</script>
+</body>
+</html>
