@@ -170,7 +170,45 @@ class Handler(BaseHTTPRequestHandler):
         length = int(self.headers.get("Content-Length", 0))
         body = json.loads(self.rfile.read(length))
 
-        if path == "/api/trials":
+        if path == "/api/feed":
+            try:
+                import datetime
+                yesterday = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                today = datetime.date.today().strftime("%Y-%m-%d")
+                params = urllib.parse.urlencode({
+                    "pageSize": "100", "format": "json",
+                    "sort": "LastUpdatePostDate:desc",
+                    "filter.advanced": "AREA[LastUpdatePostDate]RANGE[" + yesterday + "," + today + "]"
+                })
+                data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
+                trials = []
+                for study in data.get("studies", []):
+                    p = study.get("protocolSection", {})
+                    ident   = p.get("identificationModule", {})
+                    status  = p.get("statusModule", {})
+                    design  = p.get("designModule", {})
+                    sponsor = p.get("sponsorCollaboratorsModule", {})
+                    conds   = p.get("conditionsModule", {})
+                    phases  = design.get("phases", [])
+                    phase_str = phases[0].replace("PHASE", "Phase ").replace("_", " ") if phases else ""
+                    raw_status = status.get("overallStatus", "")
+                    last_update = status.get("lastUpdatePostDateStruct", {}).get("date", "")
+                    start = status.get("startDateStruct", {}).get("date", "")
+                    trials.append({
+                        "id": ident.get("nctId", ""),
+                        "title": ident.get("briefTitle", ""),
+                        "conditions": ", ".join(conds.get("conditions", [])[:2]),
+                        "sponsor": sponsor.get("leadSponsor", {}).get("name", ""),
+                        "status": raw_status.replace("_", " ").title(),
+                        "phase": phase_str,
+                        "lastUpdate": last_update,
+                        "startDate": start[:7] if start else "",
+                    })
+                resp = json.dumps({"trials": trials, "total": len(trials)}).encode()
+            except Exception as e:
+                resp = json.dumps({"error": str(e)}).encode()
+
+        elif path == "/api/trials":
             try:
                 resp = json.dumps({"trials": fetch_trials(body.get("compound", ""))}).encode()
             except Exception as e:

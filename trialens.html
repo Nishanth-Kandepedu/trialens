@@ -22,6 +22,48 @@
 html { scroll-behavior: smooth; }
 body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-serif; font-size: 13.5px; line-height: 1.55; min-height: 100vh; -webkit-font-smoothing: antialiased; }
 
+
+/* ── DARK THEME ── */
+[data-theme="dark"] {
+  --ink: #e8e4dc; --ink2: #c8c3ba; --ink3: #8a8880; --ink4: #5a5850;
+  --paper: #141210; --paper2: #1e1c19; --paper3: #282520; --paper4: #323028;
+  --gold: #d4a843; --gold2: #e8bc55; --gold-bg: rgba(212,168,67,0.1); --gold-border: rgba(212,168,67,0.25);
+  --blue: #5b8fd4; --blue-bg: rgba(91,143,212,0.1); --blue-border: rgba(91,143,212,0.25);
+  --green: #4aaa78; --green-bg: rgba(74,170,120,0.1); --green-border: rgba(74,170,120,0.25);
+  --red: #e05a4a; --red-bg: rgba(224,90,74,0.1); --red-border: rgba(224,90,74,0.25);
+  --violet: #9b7fd4; --violet-bg: rgba(155,127,212,0.1); --violet-border: rgba(155,127,212,0.25);
+  --shadow: 0 1px 3px rgba(0,0,0,0.3), 0 4px 12px rgba(0,0,0,0.2);
+  --shadow-lg: 0 4px 24px rgba(0,0,0,0.4), 0 1px 4px rgba(0,0,0,0.3);
+}
+[data-theme="dark"] body { background: var(--paper); color: var(--ink); }
+[data-theme="dark"] .topbar { background: rgba(20,18,16,0.96); }
+[data-theme="dark"] .search-box,
+[data-theme="dark"] .trial-card,
+[data-theme="dark"] .about-card,
+[data-theme="dark"] .saved-card { background: var(--paper2); }
+[data-theme="dark"] .search-input { background: var(--paper3); color: var(--ink); border-color: var(--paper4); }
+[data-theme="dark"] .search-input:focus { background: var(--paper2); }
+[data-theme="dark"] .feed-sidebar,
+[data-theme="dark"] .feed-header,
+[data-theme="dark"] .feed-body,
+[data-theme="dark"] .feed-card { background: var(--paper2); }
+[data-theme="dark"] .feed-search-input { background: var(--paper3); color: var(--ink); border-color: var(--paper4); }
+[data-theme="dark"] .feed-search-input:focus { background: var(--paper2); }
+[data-theme="dark"] .loading-overlay { background: rgba(20,18,16,0.95); }
+[data-theme="dark"] .sar-tabs { background: var(--paper2); border-color: var(--paper3); }
+[data-theme="dark"] .sar-tab-content { background: var(--paper2); }
+[data-theme="dark"] .stat-card { background: var(--paper3); }
+[data-theme="dark"] .admet-score-card { background: var(--paper3); }
+[data-theme="dark"] .potency-table th,
+[data-theme="dark"] .dose-table th { background: var(--paper3); }
+[data-theme="dark"] .metric-card { background: var(--paper2); }
+[data-theme="dark"] .feed-collapse-tab { background: var(--paper2); border-color: var(--paper3); }
+
+/* Theme toggle button */
+.theme-toggle { background: none; border: 1px solid var(--paper3); border-radius: 6px; padding: 5px 8px; cursor: pointer; color: var(--ink3); display: flex; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .5px; text-transform: uppercase; transition: all .15s; }
+.theme-toggle:hover { border-color: var(--ink3); color: var(--ink); background: var(--paper2); }
+.theme-toggle svg { flex-shrink: 0; }
+
 /* ── TOPBAR ── */
 .topbar { position: fixed; top: 0; left: 0; right: 0; z-index: 200; height: 56px; background: rgba(250,248,244,0.96); backdrop-filter: blur(20px); border-bottom: 1px solid var(--paper3); display: flex; align-items: center; padding: 0 32px; gap: 0; }
 .logo { display: flex; align-items: center; gap: 10px; text-decoration: none; flex-shrink: 0; }
@@ -42,9 +84,64 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .pill-gold { background: var(--gold-bg); color: var(--gold); border: 1px solid var(--gold-border); }
 
 /* ── PAGE WRAP ── */
-.page-wrap { margin-top: 56px; min-height: calc(100vh - 56px); }
-.view { display: none; animation: fadeIn 0.25s ease; padding-top: 56px; }
+.page-wrap { margin-top: 56px; min-height: calc(100vh - 56px); padding-left: 260px; transition: padding-left .25s ease; }
+.view { display: none; animation: fadeIn 0.25s ease; padding-top: 56px; flex: 1; min-width: 0; }
 .view.active { display: block; }
+
+/* ── LIVE FEED SIDEBAR ── */
+.feed-sidebar { width: 260px; flex-shrink: 0; position: fixed; left: 0; top: 56px; height: calc(100vh - 56px); background: #fff; border-right: 1px solid var(--paper3); display: flex; flex-direction: column; z-index: 100; transition: width .25s ease; overflow: visible; }
+.feed-sidebar.collapsed { width: 36px; }
+.feed-sidebar.collapsed .feed-body { display: none; }
+.feed-sidebar.collapsed .feed-header { display: none; }
+.feed-header { padding: 10px 12px 9px; border-bottom: 1px solid var(--paper3); display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; width: 260px; overflow: hidden; background: #fff; }
+.feed-header-left { display: flex; align-items: center; gap: 7px; }
+.feed-live-dot { width: 6px; height: 6px; border-radius: 50%; background: var(--green); flex-shrink: 0; }
+.feed-title { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink3); font-weight: 600; }
+.feed-header-btns { display: flex; align-items: center; gap: 5px; }
+.feed-icon-btn { background: none; border: 1px solid var(--paper3); border-radius: 4px; padding: 3px 5px; cursor: pointer; color: var(--ink4); display: flex; align-items: center; transition: all .15s; }
+.feed-icon-btn:hover { border-color: var(--ink); color: var(--ink); background: var(--paper2); }
+.feed-icon-btn.spinning svg { animation: spin 0.8s linear infinite; }
+.feed-collapse-tab { position: absolute; top: 50%; left: 260px; transform: translateY(-50%); width: 14px; height: 40px; background: #fff; border: 1px solid var(--paper3); border-left: none; border-radius: 0 6px 6px 0; cursor: pointer; display: flex; align-items: center; justify-content: center; color: var(--ink4); transition: left .25s ease, color .15s; z-index: 101; }
+.feed-collapse-tab:hover { color: var(--ink); background: var(--paper2); }
+.feed-sidebar.collapsed .feed-collapse-tab { left: 36px; }
+.feed-sidebar-label { position: absolute; top: 50%; left: 0; transform: translateY(-50%) rotate(-90deg); font-family: 'IBM Plex Mono', monospace; font-size: 8px; letter-spacing: 1.5px; text-transform: uppercase; color: var(--ink4); white-space: nowrap; pointer-events: none; opacity: 0; transition: opacity .2s; }
+.feed-sidebar.collapsed .feed-sidebar-label { opacity: 1; }
+.feed-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; width: 260px; background: #fff; }
+
+
+.feed-list { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.feed-card { padding: 0 12px; border-bottom: 1px solid var(--paper2); cursor: pointer; transition: background .12s; text-decoration: none; display: flex; flex-direction: column; justify-content: center; flex: 1; }
+.feed-card:hover { background: var(--paper2); }
+.feed-card:last-child { border-bottom: none; }
+.feed-nct { font-family: 'IBM Plex Mono', monospace; font-size: 9.5px; font-weight: 600; color: var(--blue); margin-bottom: 2px; }
+.feed-title-text { font-size: 11px; font-weight: 600; color: var(--ink); margin-bottom: 2px; line-height: 1.3; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden; }
+.feed-condition { font-size: 10.5px; color: var(--ink3); margin-bottom: 1px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-sponsor { font-size: 10px; color: var(--ink4); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.feed-status-row { display: flex; align-items: center; gap: 4px; margin-top: 4px; flex-wrap: wrap; }
+.feed-badge { font-family: 'IBM Plex Mono', monospace; font-size: 8px; padding: 1px 5px; border-radius: 3px; font-weight: 600; letter-spacing: .3px; text-transform: uppercase; }
+.feed-badge-recruiting { background: #2a7a5215; color: #2a7a52; border: 1px solid #2a7a5230; }
+.feed-badge-completed  { background: #2a5f9e15; color: #2a5f9e; border: 1px solid #2a5f9e30; }
+.feed-badge-active     { background: #c8922a15; color: #c8922a; border: 1px solid #c8922a30; }
+.feed-badge-other      { background: var(--paper2); color: var(--ink4); border: 1px solid var(--paper3); }
+
+.feed-date { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--ink4); margin-bottom: 2px; }
+.feed-pagination { display: flex; align-items: center; justify-content: space-between; padding: 8px 12px; border-top: 1px solid var(--paper3); flex-shrink: 0; }
+.feed-page-btn { background: none; border: 1px solid var(--paper3); border-radius: 4px; padding: 3px 8px; cursor: pointer; font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink3); transition: all .15s; }
+.feed-page-btn:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); background: var(--paper2); }
+.feed-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
+.feed-page-info { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink4); }
+.feed-total-bar { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink4); padding: 4px 12px 3px; border-bottom: 1px solid var(--paper2); flex-shrink: 0; }
+.feed-search-wrap { position: relative; padding: 8px 10px; border-bottom: 1px solid var(--paper3); flex-shrink: 0; }
+.feed-search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--ink4); pointer-events: none; }
+.feed-search-input { width: 100%; background: var(--paper2); border: 1px solid var(--paper3); border-radius: 5px; padding: 5px 8px 5px 26px; font-family: 'Inter', sans-serif; font-size: 11px; color: var(--ink); outline: none; transition: border-color .15s; box-sizing: border-box; }
+.feed-search-input:focus { border-color: var(--ink3); background: #fff; }
+.feed-search-input::placeholder { color: var(--ink4); }
+.feed-empty { padding: 24px 12px; text-align: center; font-size: 11px; color: var(--ink4); line-height: 1.6; }
+.feed-loading { padding: 24px 12px; display: flex; flex-direction: column; align-items: center; gap: 10px; }
+.feed-spinner { width: 20px; height: 20px; border: 2px solid var(--paper3); border-top-color: var(--ink3); border-radius: 50%; animation: spin 0.8s linear infinite; }
+
+/* Shift main content right when sidebar open */
+.page-wrap.feed-collapsed { padding-left: 36px; }
 @keyframes fadeIn { from { opacity: 0; transform: translateY(6px); } to { opacity: 1; transform: translateY(0); } }
 
 /* ── SEARCH VIEW ── */
@@ -262,7 +359,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .sec-lbl { font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: 2.5px; text-transform: uppercase; color: var(--ink4); margin-bottom: 16px; }
 
 /* Saved view */
-.saved-view, .about-view { max-width: 1400px; margin: 0 auto; padding: 72px 48px 80px; }
+
 .page-hdr { margin-bottom: 32px; }
 .page-hdr-title { font-size: 28px; font-weight: 700; color: var(--ink); letter-spacing: -0.8px; margin-bottom: 5px; }
 .page-hdr-title em { font-style: normal; color: var(--blue); font-weight: 700; }
@@ -320,6 +417,10 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
     <button class="topnav-btn" id="nav-about" onclick="showView('about')">About</button>
   </nav>
   <div class="topbar-right">
+    <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle dark mode">
+      <svg id="theme-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <span id="theme-label">Dark</span>
+    </button>
     <span class="pill pill-blue">ClinicalTrials.gov</span>
     
     <span class="pill pill-gold">AI · SAR</span>
@@ -327,6 +428,43 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 </header>
 
 <div class="page-wrap">
+
+<!-- ═══════════════ LIVE FEED SIDEBAR ═══════════════ -->
+<aside class="feed-sidebar" id="feed-sidebar">
+  <!-- Collapse tab -->
+  <button class="feed-collapse-tab" id="feed-collapse-tab" onclick="toggleFeed()" title="Toggle sidebar">
+    <svg id="feed-chevron" width="8" height="8" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3"><polyline points="15 18 9 12 15 6"/></svg>
+  </button>
+  <span class="feed-sidebar-label">NCT Feed</span>
+  <!-- Header -->
+  <div class="feed-header">
+    <div class="feed-header-left">
+      <div class="feed-live-dot"></div>
+      <span class="feed-title">Recent NCTs</span>
+    </div>
+    <div class="feed-header-btns">
+      <button class="feed-icon-btn" id="feed-refresh-btn" onclick="loadFeed()" title="Refresh">
+        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><polyline points="23 4 23 10 17 10"/><path d="M20.49 15a9 9 0 1 1-2.12-9.36L23 10"/></svg>
+      </button>
+    </div>
+  </div>
+  <!-- Body: search + list + pagination -->
+  <div class="feed-body">
+    <div class="feed-search-wrap">
+      <svg class="feed-search-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
+      <input class="feed-search-input" id="feed-search-input" type="text" placeholder="Search NCTs, condition, sponsor…" oninput="filterFeed()">
+    </div>
+    <div class="feed-total-bar" id="feed-total-bar"></div>
+    <div class="feed-list" id="feed-list">
+      <div class="feed-loading"><div class="feed-spinner"></div></div>
+    </div>
+    <div class="feed-pagination" id="feed-pagination" style="display:none">
+      <button class="feed-page-btn" id="feed-prev-btn" onclick="feedPage(-1)" disabled>&#8592;</button>
+      <span class="feed-page-info" id="feed-page-info"></span>
+      <button class="feed-page-btn" id="feed-next-btn" onclick="feedPage(1)">&#8594;</button>
+    </div>
+  </div>
+</aside>
 
 <!-- ═══════════════ SEARCH VIEW ═══════════════ -->
 <div class="view active search-view" id="view-search">
@@ -957,6 +1095,155 @@ function initRadarChart(i, sar) {
     options:{ responsive:true, maintainAspectRatio:false, scales:{ r:{ min:0, max:3, ticks:{stepSize:1,font:{family:'IBM Plex Mono',size:8},color:'#b5b0a8',callback:v=>['','Poor','Mod','Good'][v]||''}, grid:{color:'#ebe7de'}, pointLabels:{font:{family:'IBM Plex Mono',size:9},color:'#7a756e'}, angleLines:{color:'#ebe7de'} } }, plugins:{ legend:{display:false} } }
   });
 }
+
+
+
+// ── THEME TOGGLE ────────────────────────────────────────────────────────────
+function toggleTheme() {
+  const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+  const newTheme = isDark ? 'light' : 'dark';
+  document.documentElement.setAttribute('data-theme', newTheme);
+  localStorage.setItem('tl-theme', newTheme);
+  updateThemeBtn(newTheme);
+}
+
+function updateThemeBtn(theme) {
+  const label = document.getElementById('theme-label');
+  const icon  = document.getElementById('theme-icon');
+  if (theme === 'dark') {
+    label.textContent = 'Light';
+    icon.innerHTML = '<path d="M21 12.79A9 9 0 1 1 11.21 3 7 7 0 0 0 21 12.79z"/>';
+  } else {
+    label.textContent = 'Dark';
+    icon.innerHTML = '<circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/>';
+  }
+}
+
+// Apply saved theme on load
+(function() {
+  const saved = localStorage.getItem('tl-theme') || 'light';
+  if (saved === 'dark') {
+    document.documentElement.setAttribute('data-theme', 'dark');
+    window.addEventListener('DOMContentLoaded', () => updateThemeBtn('dark'));
+  }
+})();
+
+// ── LIVE FEED ──────────────────────────────────────────────────────────────
+let feedData = [];
+let feedFiltered = [];
+let feedPage_ = 1;
+const FEED_PAGE_SIZE = 5;
+
+function feedCardHtml(t) {
+  const statusKey = (t.status||'').toLowerCase();
+  const badgeClass = statusKey.includes('recruit') ? 'feed-badge-recruiting'
+                   : statusKey.includes('complet') ? 'feed-badge-completed'
+                   : statusKey.includes('active')  ? 'feed-badge-active'
+                   : 'feed-badge-other';
+  const condition = (t.conditions||'').split(',')[0].trim() || '';
+  const url = 'https://clinicaltrials.gov/study/' + t.id;
+  const dateStr = t.lastUpdate || '';
+  return '<a class="feed-card" href="' + url + '" target="_blank">' +
+    '<div class="feed-nct">' + (t.id||'') + (dateStr ? '<span style="color:var(--ink4);font-weight:400;margin-left:5px">' + dateStr + '</span>' : '') + '</div>' +
+    '<div class="feed-title-text">' + (t.title||'') + '</div>' +
+    (condition ? '<div class="feed-condition">' + condition + '</div>' : '') +
+    '<div class="feed-sponsor">' + (t.sponsor||'—') + '</div>' +
+    '<div class="feed-status-row">' +
+      '<span class="feed-badge ' + badgeClass + '">' + (t.status||'Unknown') + '</span>' +
+      (t.phase ? '<span class="feed-badge feed-badge-other">' + t.phase + '</span>' : '') +
+    '</div></a>';
+}
+
+function renderFeedPage() {
+  const list     = document.getElementById('feed-list');
+  const pagination = document.getElementById('feed-pagination');
+  const pageInfo = document.getElementById('feed-page-info');
+  const prevBtn  = document.getElementById('feed-prev-btn');
+  const nextBtn  = document.getElementById('feed-next-btn');
+  const totalBar = document.getElementById('feed-total-bar');
+
+  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
+  const start = (feedPage_ - 1) * FEED_PAGE_SIZE;
+  const slice = feedFiltered.slice(start, start + FEED_PAGE_SIZE);
+
+  list.innerHTML = slice.length
+    ? slice.map(feedCardHtml).join('')
+    : '<div class="feed-empty">No matches found.</div>';
+
+  const q = (document.getElementById('feed-search-input').value||'').trim();
+  totalBar.textContent = q
+    ? feedFiltered.length + ' of ' + feedData.length + ' trials'
+    : feedData.length + ' trials · last 24h';
+
+  if (feedFiltered.length > FEED_PAGE_SIZE) {
+    pagination.style.display = 'flex';
+    pageInfo.textContent = feedPage_ + ' / ' + totalPages;
+    prevBtn.disabled = feedPage_ === 1;
+    nextBtn.disabled = feedPage_ === totalPages;
+  } else {
+    pagination.style.display = 'none';
+  }
+}
+
+function filterFeed() {
+  const q = (document.getElementById('feed-search-input').value||'').toLowerCase().trim();
+  feedFiltered = q ? feedData.filter(t =>
+    (t.id||'').toLowerCase().includes(q) ||
+    (t.title||'').toLowerCase().includes(q) ||
+    (t.conditions||'').toLowerCase().includes(q) ||
+    (t.sponsor||'').toLowerCase().includes(q)
+  ) : feedData.slice();
+  feedPage_ = 1;
+  renderFeedPage();
+}
+
+function feedPage(dir) {
+  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
+  feedPage_ = Math.max(1, Math.min(totalPages, feedPage_ + dir));
+  renderFeedPage();
+  document.getElementById('feed-list').scrollTop = 0;
+}
+
+async function loadFeed() {
+  const list     = document.getElementById('feed-list');
+  const btn      = document.getElementById('feed-refresh-btn');
+  const totalBar = document.getElementById('feed-total-bar');
+  if (!list) return;
+  btn.classList.add('spinning');
+  totalBar.textContent = '';
+  document.getElementById('feed-pagination').style.display = 'none';
+  list.innerHTML = '<div class="feed-loading"><div class="feed-spinner"></div></div>';
+  try {
+    const res = await fetch('/api/feed', { method: 'POST', headers: {'Content-Type':'application/json'}, body: JSON.stringify({}) });
+    const data = await res.json();
+    feedData = data.trials || [];
+    feedFiltered = feedData.slice();
+    feedPage_ = 1;
+    document.getElementById('feed-search-input').value = '';
+    if (!feedData.length) {
+      list.innerHTML = '<div class="feed-empty">No trials updated in the last 24 hours.</div>';
+      totalBar.textContent = '0 trials in last 24h';
+      return;
+    }
+    renderFeedPage();
+  } catch(e) {
+    list.innerHTML = '<div class="feed-empty">Could not load feed.<br>Check connection.</div>';
+  } finally {
+    btn.classList.remove('spinning');
+  }
+}
+
+function toggleFeed() {
+  const sidebar = document.getElementById('feed-sidebar');
+  const wrap    = document.querySelector('.page-wrap');
+  const chevron = document.getElementById('feed-chevron');
+  const collapsed = sidebar.classList.toggle('collapsed');
+  wrap.classList.toggle('feed-collapsed', collapsed);
+  chevron.setAttribute('points', collapsed ? '9 18 15 12 9 6' : '15 18 9 12 15 6');
+}
+
+// Load feed on startup
+window.addEventListener('DOMContentLoaded', () => setTimeout(loadFeed, 500));
 
 // ── SAVED REPORTS ─────────────────────────────────────────────
 function saveCurrentReport() {
