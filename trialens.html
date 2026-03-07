@@ -60,8 +60,8 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 [data-theme="dark"] .feed-collapse-tab { background: var(--paper2); border-color: var(--paper3); }
 
 /* Theme toggle button */
-.theme-toggle { background: none; border: 1px solid var(--paper3); border-radius: 6px; padding: 5px 8px; cursor: pointer; color: var(--ink3); display: flex; align-items: center; gap: 5px; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .5px; text-transform: uppercase; transition: all .15s; }
-.theme-toggle:hover { border-color: var(--ink3); color: var(--ink); background: var(--paper2); }
+.theme-toggle { background: var(--paper2); border: 1.5px solid var(--paper3); border-radius: 20px; padding: 6px 12px; cursor: pointer; color: var(--ink2); display: flex; align-items: center; gap: 6px; font-family: 'IBM Plex Mono', monospace; font-size: 10px; font-weight: 600; letter-spacing: .5px; text-transform: uppercase; transition: all .2s; }
+.theme-toggle:hover { border-color: var(--ink3); color: var(--ink); background: var(--paper3); }
 .theme-toggle svg { flex-shrink: 0; }
 
 /* ── TOPBAR ── */
@@ -420,12 +420,9 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
   </nav>
   <div class="topbar-right">
     <button class="theme-toggle" id="theme-toggle-btn" onclick="toggleTheme()" title="Toggle dark mode">
-      <svg id="theme-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
+      <svg id="theme-icon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="5"/><line x1="12" y1="1" x2="12" y2="3"/><line x1="12" y1="21" x2="12" y2="23"/><line x1="4.22" y1="4.22" x2="5.64" y2="5.64"/><line x1="18.36" y1="18.36" x2="19.78" y2="19.78"/><line x1="1" y1="12" x2="3" y2="12"/><line x1="21" y1="12" x2="23" y2="12"/><line x1="4.22" y1="19.78" x2="5.64" y2="18.36"/><line x1="18.36" y1="5.64" x2="19.78" y2="4.22"/></svg>
       <span id="theme-label">Dark</span>
     </button>
-    <span class="pill pill-blue">ClinicalTrials.gov</span>
-    
-    <span class="pill pill-gold">AI · SAR</span>
   </div>
 </header>
 
