@@ -1,28 +1,21 @@
 """
 TriaLens server — Railway-ready
-- GET  /              → serves trialens.html
-- POST /api/trials    → ClinicalTrials.gov v2
-- POST /api/chembl    → ChEMBL + PubChem
-- POST /api/claude    → Anthropic API (SAR synthesis)
 """
 import os, re, json, pathlib, anthropic, urllib.request, urllib.parse
 from http.server import HTTPServer, BaseHTTPRequestHandler
 from urllib.parse import urlparse
 
-# Railway injects PORT dynamically; fallback to 8501 for local
 PORT = int(os.environ.get("PORT", 8501))
 BASE = pathlib.Path(__file__).parent
 
 def get_api_key():
-    # 1. Environment variable (Railway / any cloud)
     key = os.environ.get("ANTHROPIC_API_KEY", "").strip()
     if key:
         return key
-    # 2. Local secrets.toml fallback
     secrets = BASE / ".streamlit" / "secrets.toml"
     if secrets.exists():
         for line in secrets.read_text().splitlines():
-            m = re.match(r'ANTHROPIC_API_KEY\s*=\s*["\'](.+)["\']\', line.strip())
+            m = re.match(r"ANTHROPIC_API_KEY\s*=\s*[\"'](.+)[\"']", line.strip())
             if m:
                 return m.group(1).strip()
     return ""
@@ -30,23 +23,22 @@ def get_api_key():
 api_key = get_api_key()
 
 html = (BASE / "trialens.html").read_text(encoding="utf-8")
-inject = f"""<script>
-window.__TL_KEY__ = \'\';
-window.__TL_CONFIGURED__ = {'true' if api_key else 'false'};
-</script>"""
+configured = "true" if api_key else "false"
+inject = "<script>\nwindow.__TL_KEY__ = '';\nwindow.__TL_CONFIGURED__ = " + configured + ";\n</script>"
 html = html.replace("</head>", inject + "\n</head>", 1)
 html_bytes = html.encode("utf-8")
 
-# ── HELPERS ───────────────────────────────────────────────────────────────────
 def http_get(url, timeout=8):
     req = urllib.request.Request(url, headers={"Accept": "application/json", "User-Agent": "TriaLens/1.0"})
     with urllib.request.urlopen(req, timeout=timeout) as r:
         return json.loads(r.read())
 
-# ── CLINICALTRIALS.GOV ────────────────────────────────────────────────────────
 def fetch_trials(compound):
-    params = urllib.parse.urlencode({"query.intr": compound, "pageSize": "6", "format": "json", "sort": "LastUpdatePostDate:desc"})
-    data = http_get(f"https://clinicaltrials.gov/api/v2/studies?{params}")
+    params = urllib.parse.urlencode({
+        "query.intr": compound, "pageSize": "6",
+        "format": "json", "sort": "LastUpdatePostDate:desc"
+    })
+    data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
     trials = []
     for study in data.get("studies", []):
         p = study.get("protocolSection", {})
@@ -85,10 +77,9 @@ def fetch_trials(compound):
         })
     return trials
 
-# ── CHEMBL ────────────────────────────────────────────────────────────────────
 def get_chembl_id(compound):
     name = urllib.parse.quote(compound)
-    data = http_get(f"https://www.ebi.ac.uk/chembl/api/data/molecule/search?q={name}&format=json&limit=1")
+    data = http_get("https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=" + name + "&format=json&limit=1")
     mols = data.get("molecules", [])
     return mols[0].get("molecule_chembl_id", "") if mols else ""
 
@@ -97,57 +88,62 @@ def fetch_chembl_bioactivity(chembl_id):
         return []
     params = urllib.parse.urlencode({
         "molecule_chembl_id": chembl_id, "format": "json", "limit": "20",
-        "standard_type__in": "IC50,Ki,EC50,Kd,GI50", "assay_type": "B", "standard_relation": "=",
+        "standard_type__in": "IC50,Ki,EC50,Kd,GI50",
+        "assay_type": "B", "standard_relation": "=",
     })
-    data = http_get(f"https://www.ebi.ac.uk/chembl/api/data/activity?{params}")
+    data = http_get("https://www.ebi.ac.uk/chembl/api/data/activity?" + params)
     activities = []
     seen = set()
     for act in data.get("activities", []):
-        val  = act.get("standard_value")
-        unit = act.get("standard_units", "")
-        typ  = act.get("standard_type", "")
-        target = act.get("target_pref_name", "")
+        val        = act.get("standard_value")
+        unit       = act.get("standard_units", "")
+        typ        = act.get("standard_type", "")
+        target     = act.get("target_pref_name", "")
         assay_desc = act.get("assay_description", "")
-        doc = act.get("document_chembl_id", "")
-        key = f"{typ}_{target}"
+        doc        = act.get("document_chembl_id", "")
+        key        = typ + "_" + target
         if val and key not in seen:
             seen.add(key)
             activities.append({
-                "endpoint": f"{target} {typ}" if target else typ,
+                "endpoint": (target + " " + typ) if target else typ,
                 "value": float(val), "unit": unit,
                 "assay": assay_desc[:60] if assay_desc else "",
                 "source": "ChEMBL", "chembl_doc": doc, "chembl_id": chembl_id,
             })
     return activities[:8]
 
-# ── PUBCHEM ───────────────────────────────────────────────────────────────────
 def fetch_pubchem_properties(compound):
     name = urllib.parse.quote(compound)
     try:
-        cid_data = http_get(f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/{name}/cids/JSON")
+        cid_data = http_get("https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/" + name + "/cids/JSON")
         cid = cid_data.get("IdentifierList", {}).get("CID", [None])[0]
         if not cid:
             return {}, None
         prop_data = http_get(
-            f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/property/"
-            f"MolecularWeight,XLogP,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,TPSA/JSON"
+            "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/" + str(cid) +
+            "/property/MolecularWeight,XLogP,HBondDonorCount,HBondAcceptorCount,RotatableBondCount,TPSA/JSON"
         )
         p = prop_data.get("PropertyTable", {}).get("Properties", [{}])[0]
-        return {"mw": p.get("MolecularWeight"), "logp": p.get("XLogP"), "hbd": p.get("HBondDonorCount"),
-                "hba": p.get("HBondAcceptorCount"), "rotb": p.get("RotatableBondCount"),
-                "tpsa": p.get("TPSA"), "cid": cid}, cid
+        return {
+            "mw": p.get("MolecularWeight"), "logp": p.get("XLogP"),
+            "hbd": p.get("HBondDonorCount"), "hba": p.get("HBondAcceptorCount"),
+            "rotb": p.get("RotatableBondCount"), "tpsa": p.get("TPSA"), "cid": cid
+        }, cid
     except Exception:
         return {}, None
 
 def fetch_real_sar_data(compound):
-    result = {"compound": compound, "bioactivity": [], "physicochemical": {}, "sources": [], "chembl_id": "", "pubchem_cid": None}
+    result = {
+        "compound": compound, "bioactivity": [], "physicochemical": {},
+        "sources": [], "chembl_id": "", "pubchem_cid": None
+    }
     try:
         chembl_id = get_chembl_id(compound)
         if chembl_id:
             result["chembl_id"] = chembl_id
             result["bioactivity"] = fetch_chembl_bioactivity(chembl_id)
             if result["bioactivity"]:
-                result["sources"].append(f"ChEMBL ({chembl_id})")
+                result["sources"].append("ChEMBL (" + chembl_id + ")")
     except Exception as e:
         result["chembl_error"] = str(e)
     try:
@@ -155,12 +151,11 @@ def fetch_real_sar_data(compound):
         if props:
             result["physicochemical"] = props
             result["pubchem_cid"] = cid
-            result["sources"].append(f"PubChem (CID {cid})")
+            result["sources"].append("PubChem (CID " + str(cid) + ")")
     except Exception as e:
         result["pubchem_error"] = str(e)
     return result
 
-# ── REQUEST HANDLER ───────────────────────────────────────────────────────────
 class Handler(BaseHTTPRequestHandler):
 
     def do_GET(self):
@@ -195,13 +190,16 @@ class Handler(BaseHTTPRequestHandler):
                     system=body.get("system", ""),
                     messages=[{"role": "user", "content": body.get("prompt", "")}],
                 )
-                raw = re.sub(r"```json\s*|\s*```", "", msg.content[0].text.strip()).strip()
+                raw = msg.content[0].text.strip()
+                raw = re.sub(r"```json\s*|\s*```", "", raw).strip()
                 resp = json.dumps({"result": json.loads(raw)}).encode()
             except Exception as e:
                 resp = json.dumps({"error": str(e)}).encode()
 
         else:
-            self.send_response(404); self.end_headers(); return
+            self.send_response(404)
+            self.end_headers()
+            return
 
         self.send_response(200)
         self.send_header("Content-Type", "application/json")
@@ -218,9 +216,9 @@ class Handler(BaseHTTPRequestHandler):
         self.end_headers()
 
     def log_message(self, fmt, *args):
-        status = args[1] if len(args) > 1 else '?'
-        path = args[0].split(' ')[1] if ' ' in str(args[0]) else str(args[0])
-        print(f"  {status}  {path}")
+        status = args[1] if len(args) > 1 else "?"
+        path = args[0].split(" ")[1] if " " in str(args[0]) else str(args[0])
+        print("  " + str(status) + "  " + path)
 
-print(f"  TriaLens running on port {PORT} | API key: {'configured' if api_key else 'NOT SET — add ANTHROPIC_API_KEY env var'}")
+print("TriaLens running on port " + str(PORT) + " | API key: " + ("configured" if api_key else "NOT SET"))
 HTTPServer(("0.0.0.0", PORT), Handler).serve_forever()
