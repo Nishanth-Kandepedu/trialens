@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>TriaLens · Drug Discovery Intelligence</title>
+<title>Drug Intelligence · SAR · Clinical · Discovery</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
 <style>
@@ -408,8 +408,8 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
   <a class="logo" onclick="showView('search')">
     <div class="logo-hex"><span>T</span></div>
     <div class="logo-text">
-      <div class="logo-name">TriaLens</div>
-      <div class="logo-sub">Clinical Intelligence</div>
+      <div class="logo-name">Drug Intelligence</div>
+      <div class="logo-sub">SAR · Clinical · Discovery</div>
     </div>
   </a>
   <div class="sep"></div>
@@ -477,7 +477,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 
   <!-- Hero (hidden once results shown) -->
   <div class="hero" id="hero-section">
-    <div class="hero-eyebrow">Clinical SAR Intelligence</div>
+    <div class="hero-eyebrow">Drug Intelligence</div>
     <div class="hero-title">Every trial.<br>Every compound.<br><em>SAR decoded.</em></div>
     <div class="hero-sub">Search ClinicalTrials.gov and extract structured SAR intelligence including potency, dose-response, ADMET, and clinical narrative in seconds.</div>
     <div class="hero-tags">
@@ -551,12 +551,12 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 <!-- ═══════════════ ABOUT VIEW ═══════════════ -->
 <div class="view about-view" id="view-about">
   <div class="page-hdr">
-    <div class="page-hdr-title">About <em>TriaLens</em></div>
+    <div class="page-hdr-title">About <em>Drug Intelligence</em></div>
     <div class="page-hdr-sub">Clinical SAR intelligence for drug discovery &amp; medicinal chemistry teams</div>
   </div>
   <div class="about-grid">
     <div class="about-card">
-      <div class="about-card-title ac-blue">What is TriaLens?</div>
+      <div class="about-card-title ac-blue">What is Drug Intelligence?</div>
       <p>TriaLens is a clinical SAR intelligence platform for drug discovery and medicinal chemistry teams. Search any compound to instantly retrieve <b>real clinical trial records</b> from ClinicalTrials.gov, enriched with <b>verified bioactivity data</b> from ChEMBL and PubChem, and synthesised into structured SAR profiles with published literature citations.</p>
     </div>
     <div class="about-card">
@@ -569,7 +569,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
     </div>
     <div class="about-card">
       <div class="about-card-title ac-gold">Disclaimer</div>
-      <p>TriaLens combines <b>real bioactivity data</b> from ChEMBL and PubChem with AI-synthesised interpretation for <b>research reference only</b>. While potency values and physicochemical properties are sourced from peer-reviewed databases, ADMET predictions, dose-response summaries, and SAR narratives are AI-generated and may not reflect clinical reality. Always verify against primary literature before any research, commercial, or regulatory decision.</p>
+      <p>Drug Intelligence combines <b>real bioactivity data</b> from ChEMBL and PubChem with AI-synthesised interpretation for <b>research reference only</b>. While potency values and physicochemical properties are sourced from peer-reviewed databases, ADMET predictions, dose-response summaries, and SAR narratives are AI-generated and may not reflect clinical reality. Always verify against primary literature before any research, commercial, or regulatory decision.</p>
     </div>
     <div class="about-card">
       <div class="about-card-title ac-red">Built by</div>
@@ -577,7 +577,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
         <div style="font-size:14px; font-weight:700; color:var(--ink); margin-bottom:2px;">Nishanth Kandepedu</div>
         <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink4); letter-spacing:.5px; text-transform:uppercase; margin-bottom:14px;">Medicinal Chemist</div>
         <p style="color:var(--ink3); line-height:1.8; margin-bottom:10px;">I'm Nishanth, a medicinal chemist working at the intersection of drug discovery data and SAR intelligence. Over the years, I've worked extensively with curated medicinal chemistry datasets and have seen firsthand how difficult it can be to connect clinical trial outcomes back to the molecules themselves.</p>
-        <p style="color:var(--ink3); line-height:1.8; margin-bottom:10px;"><b style="color:var(--ink);">TriaLens started as a small experiment:</b> what if you could type a compound name and instantly see the clinical trials, pharmacology, and SAR insights that matter?</p>
+        <p style="color:var(--ink3); line-height:1.8; margin-bottom:10px;"><b style="color:var(--ink);">Drug Intelligence started as a small experiment:</b> what if you could type a compound name and instantly see the clinical trials, pharmacology, and SAR insights that matter?</p>
         <p style="color:var(--ink3); line-height:1.8; margin-bottom:16px;">This tool is my attempt to make clinical evidence more accessible and interpretable — helping medicinal and computational chemists connect molecules to their real-world clinical outcomes.</p>
         <a href="https://www.linkedin.com/in/nishanth-kandepedu/" target="_blank" style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--blue-border); border-radius:6px; text-decoration:none; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--blue); background:var(--blue-bg); transition:all .15s;" onmouseover="this.style.background='var(--blue)';this.style.color='#fff';" onmouseout="this.style.background='var(--blue-bg)';this.style.color='var(--blue)';">
           <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
@@ -1388,7 +1388,7 @@ function downloadTrial(i) {
     // Narrative
     sarHTML += section('SAR Narrative', '#c8922a', `<div style="background:var(--paper);border:1px solid var(--paper3);border-left:3px solid var(--violet);border-radius:8px;padding:20px 24px;font-size:14px;line-height:1.8;color:var(--ink2);">${sar.summary||'—'}</div>`);
   } else {
-    sarHTML += section('SAR Profile', '#ddd9cf', `<div style="background:var(--paper2);border:1px dashed #ddd9cf;border-radius:8px;padding:20px 24px;font-size:13px;color:#b5b0a8;font-family:'IBM Plex Mono',monospace;">SAR not yet generated. Open TriaLens, expand this trial and click Generate SAR Profile.</div>`);
+    sarHTML += section('SAR Profile', '#ddd9cf', `<div style="background:var(--paper2);border:1px dashed #ddd9cf;border-radius:8px;padding:20px 24px;font-size:13px;color:#b5b0a8;font-family:'IBM Plex Mono',monospace;">SAR not yet generated. Open Drug Intelligence, expand this trial and click Generate SAR Profile.</div>`);
   }
 
   const html = `<!DOCTYPE html>
@@ -1396,7 +1396,7 @@ function downloadTrial(i) {
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>TriaLens Report — ${currentCompound} · ${nct}</title>
+<title>Drug Intelligence Report — ${currentCompound} · ${nct}</title>
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
@@ -1414,8 +1414,8 @@ function downloadTrial(i) {
         <span style="color:#faf8f4;font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;">T</span>
       </div>
       <div>
-        <div style="font-size:15px;font-weight:700;letter-spacing:-0.4px;">TriaLens</div>
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#b5b0a8;letter-spacing:1.5px;text-transform:uppercase;">Clinical Intelligence Report</div>
+        <div style="font-size:15px;font-weight:700;letter-spacing:-0.4px;">Drug Intelligence</div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#b5b0a8;letter-spacing:1.5px;text-transform:uppercase;">SAR · Clinical · Discovery</div>
       </div>
     </div>
     <div style="text-align:right;">
@@ -1453,7 +1453,7 @@ function downloadTrial(i) {
   <!-- Footer -->
   <div style="margin-top:48px;padding-top:20px;border-top:1px solid #ebe7de;display:flex;align-items:center;justify-content:space-between;">
     <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;letter-spacing:.5px;">AI-generated · Research reference only · Verify against primary literature</div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;">TriaLens · trialens.ai</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;">Drug Intelligence · drug-intelligence.ai</div>
   </div>
 
   <div class="no-print" style="margin-top:24px;text-align:center;">
@@ -1467,7 +1467,7 @@ function downloadTrial(i) {
   const blob = new Blob([html], {type: 'text/html'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `TriaLens_${currentCompound}_${nct}.html`;
+  a.download = `DrugIntelligence_${currentCompound}_${nct}.html`;
   a.click();
   showToast(`Downloaded report for ${nct}`);
 }
