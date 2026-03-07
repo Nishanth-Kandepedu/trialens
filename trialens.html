@@ -109,7 +109,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .feed-body { display: flex; flex-direction: column; flex: 1; overflow: hidden; width: 260px; background: var(--paper); }
 
 
-.feed-list { display: flex; flex-direction: column; flex: 1; overflow: hidden; }
+.feed-list { display: flex; flex-direction: column; flex: 1; overflow-y: auto; overflow-x: hidden; }
 .feed-card { padding: 0 12px; border-bottom: 1px solid var(--paper2); cursor: pointer; transition: background .12s; text-decoration: none; display: flex; flex-direction: column; justify-content: center; flex: 1; }
 .feed-card:hover { background: var(--paper2); }
 .feed-card:last-child { border-bottom: none; }
