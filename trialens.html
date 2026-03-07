@@ -383,6 +383,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .ac-green::before { background: var(--green); }
 .ac-violet::before { background: var(--violet); }
 .ac-gold::before { background: var(--gold); }
+.ac-red::before { background: var(--red); }
 .about-card p { font-size: 13px; color: var(--ink3); line-height: 1.75; }
 .about-card p b { color: var(--ink); font-weight: 600; }
 
@@ -571,6 +572,20 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
     <div class="about-card">
       <div class="about-card-title ac-gold">Disclaimer</div>
       <p>TriaLens combines <b>real bioactivity data</b> from ChEMBL and PubChem with AI-synthesised interpretation for <b>research reference only</b>. While potency values and physicochemical properties are sourced from peer-reviewed databases, ADMET predictions, dose-response summaries, and SAR narratives are AI-generated and may not reflect clinical reality. Always verify against primary literature before any research, commercial, or regulatory decision.</p>
+    </div>
+    <div class="about-card">
+      <div class="about-card-title ac-red">Built by</div>
+      <div style="flex:1;">
+        <div style="font-size:14px; font-weight:700; color:var(--ink); margin-bottom:2px;">Nishanth Kandepedu</div>
+        <div style="font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--ink4); letter-spacing:.5px; text-transform:uppercase; margin-bottom:14px;">Medicinal Chemist</div>
+        <p style="color:var(--ink3); line-height:1.8; margin-bottom:10px;">I'm Nishanth, a medicinal chemist working at the intersection of drug discovery data and SAR intelligence. Over the years, I've worked extensively with curated medicinal chemistry datasets and have seen firsthand how difficult it can be to connect clinical trial outcomes back to the molecules themselves.</p>
+        <p style="color:var(--ink3); line-height:1.8; margin-bottom:10px;"><b style="color:var(--ink);">TriaLens started as a small experiment:</b> what if you could type a compound name and instantly see the clinical trials, pharmacology, and SAR insights that matter?</p>
+        <p style="color:var(--ink3); line-height:1.8; margin-bottom:16px;">This tool is my attempt to make clinical evidence more accessible and interpretable — helping medicinal and computational chemists connect molecules to their real-world clinical outcomes.</p>
+        <a href="https://www.linkedin.com/in/nishanth-kandepedu/" target="_blank" style="display:inline-flex; align-items:center; gap:6px; padding:6px 12px; border:1px solid var(--blue-border); border-radius:6px; text-decoration:none; font-family:'IBM Plex Mono',monospace; font-size:10px; color:var(--blue); background:var(--blue-bg); transition:all .15s;" onmouseover="this.style.background='var(--blue)';this.style.color='#fff';" onmouseout="this.style.background='var(--blue-bg)';this.style.color='var(--blue)';">
+          <svg width="11" height="11" viewBox="0 0 24 24" fill="currentColor"><path d="M16 8a6 6 0 0 1 6 6v7h-4v-7a2 2 0 0 0-2-2 2 2 0 0 0-2 2v7h-4v-7a6 6 0 0 1 6-6z"/><rect x="2" y="9" width="4" height="12"/><circle cx="4" cy="4" r="2"/></svg>
+          LinkedIn
+        </a>
+      </div>
     </div>
   </div>
 </div>
