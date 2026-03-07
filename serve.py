@@ -275,6 +275,20 @@ class Handler(BaseHTTPRequestHandler):
                 self.send_json({"success": False, "error": "Invalid credentials"}, 401)
             return
 
+        # ── LOGOUT ──
+        if path == "/api/logout":
+            token = get_session_token(self.headers)
+            if token and token in SESSIONS:
+                del SESSIONS[token]
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Set-Cookie", "di_session=; Path=/; HttpOnly; Max-Age=0")
+            resp = json.dumps({"success": True}).encode()
+            self.send_header("Content-Length", str(len(resp)))
+            self.end_headers()
+            self.wfile.write(resp)
+            return
+
         # ── CONTACT ──
         if path == "/api/contact":
             name    = body.get("name", "").strip()
