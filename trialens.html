@@ -919,6 +919,11 @@ async function generateSAR(i) {
     setProgress(35, 'Processing bioactivity data...');
     await sleep(200);
 
+    // Surface ChEMBL debug info
+    if (realData.chembl_lookup_log) console.log('[ChEMBL lookup log]', realData.chembl_lookup_log.join('\n'));
+    if (realData.chembl_error) console.warn('ChEMBL error:', realData.chembl_error);
+    if (!realData.chembl_id) console.warn('ChEMBL: no molecule found for', currentCompound);
+
     // Separate potency vs ADME data
     const allBio = realData.bioactivity || [];
     const admeRaw = realData.adme_data || [];
@@ -1195,7 +1200,13 @@ function renderPotency(i, sar) {
       </tr>`;
     });  // Keep as array for pagination
 
-  const noPotency = !realRows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No bioactivity data found in ChEMBL for this compound. This may be because the compound is novel, proprietary, or registered under a different name.</div>' : '';
+  const rd = sar._realData || {};
+  const lookupLog = rd.chembl_lookup_log ? rd.chembl_lookup_log.join(' | ') : '';
+  const noPotency = !realRows.length ? `<div style="padding:20px;color:var(--ink3);font-size:13px;">
+    No bioactivity data found in ChEMBL for this compound.
+    ${rd.chembl_id ? '' : '<br><span style="font-size:11px;font-family:IBM Plex Mono,monospace;color:#c0392b;">ChEMBL lookup failed — check browser console for details.</span>'}
+    ${lookupLog ? `<details style="margin-top:8px;"><summary style="font-size:11px;cursor:pointer;color:var(--ink3);">Debug log</summary><pre style="font-size:10px;color:var(--ink3);white-space:pre-wrap;margin-top:4px;">${lookupLog}</pre></details>` : ''}
+  </div>` : '';
   const potPaged = realRows.length ? paginatedTable(tableRows, 'pot-'+i) : null;
 
   return `
