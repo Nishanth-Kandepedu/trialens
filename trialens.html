@@ -1561,11 +1561,14 @@ function handleFeedSearch() {
   // Step 1: local filter for instant feedback
   filterFeed();
 
-  // Step 2: check if local filter found anything
-  const localMatches = feedData.filter(t => {
-    const hay = [t.nctId||'', t.title||'', t.conditions||'', t.sponsor||''].join(' ').toLowerCase();
-    return hay.includes(q.toLowerCase());
-  });
+  // Step 2: check if local filter found anything — use same logic as filterFeed()
+  const ql = q.toLowerCase();
+  const localMatches = feedData.filter(t =>
+    (t.id||'').toLowerCase().includes(ql) ||
+    (t.title||'').toLowerCase().includes(ql) ||
+    (t.conditions||'').toLowerCase().includes(ql) ||
+    (t.sponsor||'').toLowerCase().includes(ql)
+  );
 
   const panel = document.getElementById('feed-search-results');
   panel.style.display = 'block';
