@@ -117,13 +117,36 @@ def http_get(url, timeout=20, retries=2):
                 import time; time.sleep(1)
     raise last_err
 
+def normalise_phase(raw):
+    """Convert ClinicalTrials.gov phase codes to clean display strings."""
+    if not raw:
+        return ""
+    r = raw.upper().replace("EARLY_PHASE_1","EARLY_PHASE1").replace("_","")
+    if "EARLYPHASE1" in r or ("EARLY" in r and "1" in r): return "Early Phase 1"
+    if "PHASE1" in r or "PHASE 1" in r: return "Phase 1"
+    if "PHASE2" in r or "PHASE 2" in r: return "Phase 2"
+    if "PHASE3" in r or "PHASE 3" in r: return "Phase 3"
+    if "PHASE4" in r or "PHASE 4" in r: return "Phase 4"
+    return raw.replace("_"," ").title()
+
 def fetch_trials(compound):
-    params = urllib.parse.urlencode({
-        "query.intr": compound, "pageSize": "100",
-        "format": "json", "sort": "LastUpdatePostDate:desc"
-    })
-    data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
-    total_count = data.get("totalCount", 0)
+    base_params = {
+        "query.intr": compound,
+        "format": "json",
+        "sort": "LastUpdatePostDate:desc"
+    }
+    # First: get accurate total count with pageSize=1 (fast, always returns totalCount)
+    count_params = urllib.parse.urlencode({**base_params, "pageSize": "1"})
+    try:
+        count_data  = http_get("https://clinicaltrials.gov/api/v2/studies?" + count_params)
+        total_count = count_data.get("totalCount", 0)
+        print(f"[Trials] totalCount for '{compound}': {total_count}", flush=True)
+    except Exception:
+        total_count = 0
+
+    # Then: fetch up to 100 newest trials
+    params = urllib.parse.urlencode({**base_params, "pageSize": "100"})
+    data   = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
     trials = []
     for study in data.get("studies", []):
         p = study.get("protocolSection", {})
@@ -135,7 +158,7 @@ def fetch_trials(compound):
         conds    = p.get("conditionsModule", {})
         outcomes = p.get("outcomesModule", {})
         phases   = design.get("phases", [])
-        phase_str = phases[0].replace("PHASE","Phase ").replace("_"," ") if phases else ""
+        phase_str = normalise_phase(phases[0] if phases else "")
         raw_status = status.get("overallStatus","")
         primary_outcomes = outcomes.get("primaryOutcomes",[])
         primary_outcome = primary_outcomes[0].get("measure","") if primary_outcomes else ""
@@ -594,7 +617,7 @@ class Handler(BaseHTTPRequestHandler):
                     sponsor = p.get("sponsorCollaboratorsModule", {})
                     conds   = p.get("conditionsModule", {})
                     phases  = design.get("phases", [])
-                    phase_str = phases[0].replace("PHASE","Phase ").replace("_"," ") if phases else ""
+                    phase_str = normalise_phase(phases[0] if phases else "")
                     raw_status = status.get("overallStatus","")
                     last_update = status.get("lastUpdatePostDateStruct",{}).get("date","")
                     start = status.get("startDateStruct",{}).get("date","")
@@ -644,7 +667,7 @@ class Handler(BaseHTTPRequestHandler):
                     sponsor = p.get("sponsorCollaboratorsModule", {})
                     conds   = p.get("conditionsModule", {})
                     phases  = design.get("phases", [])
-                    phase_str = phases[0].replace("PHASE","Phase ").replace("_"," ") if phases else ""
+                    phase_str = normalise_phase(phases[0] if phases else "")
                     raw_status = status.get("overallStatus","")
                     last_update = status.get("lastUpdatePostDateStruct",{}).get("date","")
                     start = status.get("startDateStruct",{}).get("date","")
