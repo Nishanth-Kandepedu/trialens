@@ -817,6 +817,23 @@ function renderTrialCard(t, i) {
       ${t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : ''}
       ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
 
+      <div class="dose-section" id="dose-section-${i}" style="border-top:1px solid var(--paper3);padding:16px 20px 0;">
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
+          <button class="btn-ghost" style="font-size:11px;padding:5px 12px;" onclick="generateDoseResponse(${i})" id="dose-btn-${i}">
+            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
+            Generate Dose-Response
+          </button>
+          <span style="font-size:11px;color:var(--ink3);font-family:'IBM Plex Mono',monospace;">Inferred from this trial's phase, outcomes &amp; enrollment</span>
+        </div>
+        <div class="sar-progress" id="dose-progress-${i}" style="padding:0;">
+          <div class="loader-wrap" style="padding:12px 0;">
+            <div class="loader-spinner"></div>
+            <div class="loader-step-label" id="dose-prog-label-${i}">Analysing trial context…</div>
+            <div class="loader-bar-track"><div class="loader-bar-fill" id="dose-prog-bar-${i}" style="width:0%"></div></div>
+          </div>
+        </div>
+        <div id="dose-results-${i}"></div>
+      </div>
     </div>
   </div>`;
 }
@@ -824,6 +841,81 @@ function renderTrialCard(t, i) {
 function toggleTrial(i) {
   const card = document.getElementById('trial-'+i);
   card.classList.toggle('open');
+}
+
+async function generateDoseResponse(i) {
+  if (!apiKey) { showToast('Enter your API key first.'); return; }
+  const t = currentTrials[i];
+  const btn = document.getElementById('dose-btn-'+i);
+  const progressEl = document.getElementById('dose-progress-'+i);
+  const labelEl = document.getElementById('dose-prog-label-'+i);
+  const barEl = document.getElementById('dose-prog-bar-'+i);
+  const resultsEl = document.getElementById('dose-results-'+i);
+  btn.disabled = true;
+  progressEl.classList.add('active');
+
+  const setProgress = (pct, label) => {
+    if (labelEl) labelEl.textContent = label;
+    if (barEl) barEl.style.width = pct + '%';
+  };
+
+  try {
+    setProgress(30, 'Reading trial context...');
+    await sleep(200);
+
+    const cond = Array.isArray(t.conditions) ? t.conditions.join(', ') : (t.conditions||'N/A');
+    const trialContext = [
+      `NCT ID: ${t.nctId||t.id||'N/A'}`,
+      `Title: ${t.title||'N/A'}`,
+      `Phase: ${t.phase||'N/A'}`,
+      `Status: ${t.status||'N/A'}`,
+      `Condition: ${cond}`,
+      `Sponsor: ${t.sponsor||'N/A'}`,
+      `Enrollment: ${t.enrollment||'N/A'} participants`,
+      `Primary Outcome: ${t.primaryOutcome||'N/A'}`,
+      `Start: ${t.startDate||'N/A'}`,
+      `Completion: ${t.completionDate||'N/A'}`,
+      t.summary ? `Summary: ${t.summary}` : '',
+    ].filter(Boolean).join('\n');
+
+    setProgress(60, 'Inferring dose-response from trial data...');
+
+    const dr = await callClaude(
+`You are generating a dose-response profile for a specific clinical trial of "${currentCompound}".
+Use ONLY the clinical trial context below — do not invent data not derivable from it.
+
+TRIAL CONTEXT:
+${trialContext}
+
+Return a JSON object with exactly one key:
+
+"dose_response": Array of 3-4 objects representing dose escalation points for this trial.
+Each object: {dose, response_rate, toxicity_grade, notes}
+- dose: realistic dose string for this compound/phase/condition (e.g. "100 mg QD", "200 mg BID")
+- response_rate: integer 0-100 — estimated efficacy % based on trial phase and outcome language
+  * Phase 1: typically 10-40% (safety focus, not powered for efficacy)
+  * Phase 2: typically 30-60%
+  * Phase 3: typically 50-80% if positive trial language
+- toxicity_grade: integer 1-3
+  * 1 = mild (Phase 1 low dose or well-tolerated)
+  * 2 = moderate
+  * 3 = severe (high dose or known toxicity)
+- notes: one sentence citing the specific trial context (phase, condition, outcome measure)
+
+Return ONLY valid JSON. No markdown.`,
+      'You are a clinical pharmacologist. Infer dose-response from trial context only. Return ONLY valid JSON.'
+    );
+
+    setProgress(100, 'Done');
+    await sleep(150);
+    progressEl.classList.remove('active');
+    resultsEl.innerHTML = renderDose(i, dr);
+    setTimeout(() => initDoseChart(i, dr), 50);
+  } catch(e) {
+    progressEl.classList.remove('active');
+    btn.disabled = false;
+    showToast('Dose-response failed: ' + e.message);
+  }
 }
 
 // ── SAR GENERATION ─────────────────────────────────────────────
@@ -937,13 +1029,6 @@ Return a JSON object with these exact keys:
 - Include at most 8 rows — pick the most pharmacologically relevant endpoints
 - If POTENCY DATA is NONE → return []
 
-"dose_response": Array of dose-response points inferred ONLY from clinical trial context (enrollment, phase, outcomes, conditions). Each object: {dose, response_rate, toxicity_grade, notes}
-- dose: a realistic dose string based on the trial phase and condition (e.g. "100 mg QD")
-- response_rate: integer 0-100 representing estimated efficacy based on trial outcome language
-- toxicity_grade: integer 1-3 based on trial phase/safety language
-- notes: brief rationale citing the trial context
-- Always provide 3-4 rows using clinical context — this is always possible from trial data
-
 "admet": Array from ADME/TOX DATA only. Each object: {property, value, unit, rating, notes, source}
 - property: standardised name (Half-life, Clearance, AUC, Protein Binding, hERG IC50, etc.)
 - value: EXACT numeric value from the data
@@ -991,16 +1076,16 @@ function renderCompoundSARResults(sar) {
     </div>
     <div class="sar-tabs">
       <div class="sar-tab active" onclick="switchCompoundTab('potency', this)">Potency & Efficacy</div>
-      <div class="sar-tab" onclick="switchCompoundTab('dose', this)">Dose-Response</div>
+
       <div class="sar-tab" onclick="switchCompoundTab('admet', this)">ADMET</div>
       <div class="sar-tab" onclick="switchCompoundTab('narrative', this)">SAR Narrative</div>
     </div>
     <div class="sar-tab-content active" id="ctab-potency">${renderPotency('c', sar)}</div>
-    <div class="sar-tab-content" id="ctab-dose" style="display:none;">${renderDose('c', sar)}</div>
+
     <div class="sar-tab-content" id="ctab-admet" style="display:none;">${renderAdmet('c', sar)}</div>
     <div class="sar-tab-content" id="ctab-narrative" style="display:none;">${renderNarrative('c', sar)}</div>`;
   el.classList.add('active');
-  setTimeout(() => { initPotencyChart('c', sar); initDoseChart('c', sar); initRadarChart('c', sar); }, 50);
+  setTimeout(() => { initPotencyChart('c', sar); initRadarChart('c', sar); }, 50);
 }
 
 function switchCompoundTab(tab, el) {
