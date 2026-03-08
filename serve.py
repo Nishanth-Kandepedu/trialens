@@ -237,9 +237,11 @@ def resolve_chembl_id(compound):
     Resolve a compound name to a ChEMBL ID.
     Returns (chembl_id, debug_log).
 
-    Primary path: PubChem name -> CID -> cross-reference -> ChEMBL ID
-    This avoids direct calls to ebi.ac.uk which may be blocked by some proxies.
-    Fallback: direct ChEMBL API calls.
+    Waterfall:
+    1. PubChem name -> CID -> InChIKey -> ChEMBL (most robust cross-ref)
+    2. PubChem RegistryID xref (quick, works for well-known drugs)
+    3. UniChem InChIKey lookup (ebi.ac.uk/unichem - different from ChEMBL API)
+    4. Direct ChEMBL API pref_name / search (may be blocked on some hosts)
     """
     q = compound.strip()
     log = []
@@ -262,61 +264,94 @@ def resolve_chembl_id(compound):
                 return m.get("molecule_chembl_id", "")
         return mols[0].get("molecule_chembl_id", "")
 
-    # ── Path 1: PubChem name → CID → cross-ref to ChEMBL (most reliable) ────
+    pubchem_cid = None
+    inchikey    = None
+
+    # ── Step 1: PubChem name → CID + InChIKey ────────────────────────────────
     try:
-        cid_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/" + urllib.parse.quote(q) + "/cids/JSON"
+        cid_url  = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/" + urllib.parse.quote(q) + "/cids/JSON"
         cid_data = http_get(cid_url)
-        cids = cid_data.get("IdentifierList", {}).get("CID", [])
+        cids     = cid_data.get("IdentifierList", {}).get("CID", [])
         if cids:
             pubchem_cid = cids[0]
             log.append(f"PubChem CID: {pubchem_cid}")
-            # Get cross-references from PubChem — includes ChEMBL SID/source
-            xref_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{pubchem_cid}/xrefs/RegistryID/JSON"
-            xref_data = http_get(xref_url)
-            reg_ids = xref_data.get("InformationList", {}).get("Information", [{}])[0].get("RegistryID", [])
-            for rid in reg_ids:
-                if str(rid).upper().startswith("CHEMBL"):
-                    log.append(f"Found via PubChem xref: {rid}")
-                    print(f"[ChEMBL] '{compound}' -> '{rid}' via PubChem xref", flush=True)
-                    return rid, log
-            log.append(f"PubChem xref: no ChEMBL ID in {len(reg_ids)} registry IDs")
+            # Fetch InChIKey — universal cross-reference key
+            ik_url   = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{pubchem_cid}/property/InChIKey/JSON"
+            ik_data  = http_get(ik_url)
+            props    = ik_data.get("PropertyTable", {}).get("Properties", [{}])
+            inchikey = props[0].get("InChIKey", "") if props else ""
+            if inchikey:
+                log.append(f"InChIKey: {inchikey}")
         else:
             log.append("PubChem: no CID found")
     except Exception as e:
-        log.append(f"PubChem xref ERROR: {e}")
-        print(f"[ChEMBL] PubChem xref error for '{compound}': {e}", flush=True)
+        log.append(f"PubChem CID/InChIKey ERROR: {e}")
+        print(f"[ChEMBL] PubChem step error: {e}", flush=True)
 
-    # ── Path 2: UniChem (different subdomain from ChEMBL API, often not blocked) ─
-    try:
-        # UniChem source 1 = ChEMBL
-        unichem_url = "https://www.ebi.ac.uk/unichem/rest/orphanIdSearch/search?searchTerm=" + urllib.parse.quote(q)
-        # Actually use the compound name → InChI → ChEMBL approach via UniChem
-        # Simpler: use UniChem's name search endpoint
-        unichem_url = "https://www.ebi.ac.uk/unichem/api/v1/compounds?name=" + urllib.parse.quote(q) + "&type=name"
-        uc_data = http_get(unichem_url)
-        compounds_list = uc_data.get("compounds", []) if isinstance(uc_data, dict) else []
-        for c in compounds_list[:3]:
-            for src in (c.get("sources") or []):
-                if (src.get("shortName") or "").upper() == "CHEMBL":
-                    cid = src.get("compoundId", "")
+    # ── Step 2: PubChem RegistryID xref (fast, works for common drugs) ────────
+    if pubchem_cid:
+        try:
+            xref_url  = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{pubchem_cid}/xrefs/RegistryID/JSON"
+            xref_data = http_get(xref_url)
+            reg_ids   = xref_data.get("InformationList", {}).get("Information", [{}])[0].get("RegistryID", [])
+            log.append(f"PubChem xref: {len(reg_ids)} registry IDs")
+            for rid in reg_ids:
+                if str(rid).upper().startswith("CHEMBL"):
+                    log.append(f"xref match: {rid}")
+                    print(f"[ChEMBL] '{compound}' -> '{rid}' via PubChem xref", flush=True)
+                    return str(rid).upper(), log
+        except Exception as e:
+            log.append(f"PubChem xref ERROR: {e}")
+
+    # ── Step 3: ChEMBL lookup by InChIKey (most reliable if reachable) ────────
+    if inchikey:
+        try:
+            ik_url = f"https://www.ebi.ac.uk/chembl/api/data/molecule?molecule_structures__standard_inchi_key={inchikey}&format=json&limit=1"
+            resp   = http_get(ik_url)
+            mols   = resp.get("molecules", [])
+            log.append(f"ChEMBL InChIKey({inchikey}): {len(mols)} results")
+            if mols:
+                cid = mols[0].get("molecule_chembl_id", "")
+                if cid:
+                    log.append(f"InChIKey match: {cid}")
+                    print(f"[ChEMBL] '{compound}' -> '{cid}' via InChIKey", flush=True)
+                    return cid, log
+        except Exception as e:
+            log.append(f"ChEMBL InChIKey ERROR: {e}")
+            print(f"[ChEMBL] InChIKey lookup error: {e}", flush=True)
+
+    # ── Step 4: UniChem InChIKey lookup ──────────────────────────────────────
+    # UniChem REST API: GET /unichem/rest/inchikey/{inchikey}
+    if inchikey:
+        try:
+            uc_url  = f"https://www.ebi.ac.uk/unichem/rest/inchikey/{inchikey}"
+            uc_data = http_get(uc_url)
+            # Response is a list of {src_id, src_compound_id, ...}; src_id=1 is ChEMBL
+            entries = uc_data if isinstance(uc_data, list) else []
+            for entry in entries:
+                if str(entry.get("src_id", "")) == "1":  # 1 = ChEMBL in UniChem
+                    cid = entry.get("src_compound_id", "")
                     if cid:
+                        # Ensure it has CHEMBL prefix
+                        if not cid.upper().startswith("CHEMBL"):
+                            cid = "CHEMBL" + cid
                         log.append(f"UniChem match: {cid}")
-                        print(f"[ChEMBL] '{compound}' -> '{cid}' via UniChem", flush=True)
+                        print(f"[ChEMBL] '{compound}' -> '{cid}' via UniChem InChIKey", flush=True)
                         return cid, log
-        log.append(f"UniChem: no match")
-    except Exception as e:
-        log.append(f"UniChem ERROR: {e}")
-        print(f"[ChEMBL] UniChem error for '{compound}': {e}", flush=True)
+            log.append(f"UniChem: no ChEMBL entry in {len(entries)} sources")
+        except Exception as e:
+            log.append(f"UniChem ERROR: {e}")
+            print(f"[ChEMBL] UniChem error: {e}", flush=True)
 
-    # ── Path 3: Direct ChEMBL API (may be blocked) ───────────────────────────
+    # ── Step 5: Direct ChEMBL API — pref_name, then full-text ────────────────
     BASE = "https://www.ebi.ac.uk/chembl/api/data"
-    for endpoint, label in [
-        (f"{BASE}/molecule?pref_name__iexact={urllib.parse.quote(q)}&format=json&limit=3", "chembl_pref"),
-        (f"{BASE}/molecule/search?q={urllib.parse.quote(q)}&format=json&limit=10", "chembl_search"),
+    for url, label in [
+        (f"{BASE}/molecule?pref_name__iexact={urllib.parse.quote(q)}&format=json&limit=3",  "chembl_pref"),
+        (f"{BASE}/molecule/search?q={urllib.parse.quote(q)}&format=json&limit=10",           "chembl_search"),
     ]:
         try:
-            resp = http_get(endpoint)
-            mols = resp.get("molecules", [])
+            resp  = http_get(url)
+            mols  = resp.get("molecules", [])
             names = [m.get("pref_name", "?") for m in mols[:4]]
             log.append(f"{label}: {len(mols)} results {names}")
             print(f"[ChEMBL] {label}: {len(mols)} results {names}", flush=True)
