@@ -845,7 +845,7 @@ async function generateSAR(i) {
     const realData = await chemblRes.json();
 
     const bioLines = (realData.bioactivity || []).map(a =>
-      `${a.endpoint}: ${a.value} ${a.unit} [${a.assay||'binding assay'}] — ChEMBL ${realData.chembl_id}`
+      `${a.type}: ${a.value} ${a.unit} [${a.assay||'binding assay'}] — ChEMBL ref: ${a.reference||''}` 
     ).join('\n') || 'No ChEMBL bioactivity data found';
 
     const pc = realData.physicochemical || {};
@@ -861,7 +861,13 @@ async function generateSAR(i) {
     const sources = (realData.sources || []).join(', ') || 'Claude training data only';
 
     const sar = await callClaude(
-      `You are synthesising a SAR report for ${currentCompound} using verified database sources.
+      `You are synthesising a SAR report for ${currentCompound} using ONLY the verified database sources provided below.
+
+CRITICAL RULES — YOU MUST FOLLOW THESE EXACTLY:
+1. NEVER invent, guess, or hallucinate literature references, journal names, PMIDs, or paper titles.
+2. For "source" fields, ONLY use one of: "ChEMBL ${realData.chembl_id||''}", "PubChem CID ${(realData.physicochemical||{}).cid||''}", "ClinicalTrials.gov", or "Inferred from physicochemical data". Nothing else.
+3. If a value is not in the provided data, say "Not available" — do NOT fabricate a number.
+4. Do NOT cite any journal, paper, PMID, or author under any circumstance.
 
 REAL BIOACTIVITY DATA (ChEMBL ${realData.chembl_id || 'not found'}):
 ${bioLines}
@@ -874,14 +880,14 @@ Phase: ${t.phase}, Status: ${t.status}, Conditions: ${t.conditions}
 Primary Outcome: ${t.primaryOutcome}
 
 Generate a JSON object with EXACTLY these keys:
-- "potency_table": array of 4 objects {endpoint, value, unit, assay, source} — use real ChEMBL values where available; for values not from ChEMBL, cite the actual published source — e.g. "PMID 12345678", "J Med Chem 2019", "Nature 2020" — based on your knowledge of published literature for this compound; only use source="Claude AI" if you truly cannot cite a specific paper
-- "dose_response": array of 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes}
-- "admet": array of exactly 7 objects in this order: Oral Bioavailability, Half-life, Protein Binding, CYP3A4 Inhibition, hERG Liability, BBB Penetration, Renal Clearance — each {property, value, rating ("good"|"moderate"|"poor"), notes, source} — use PubChem physicochemical data to inform ratings, cite source as "PubChem" where derived from physicochemical data; for clinical/PK properties cite the actual paper e.g. "PMID 12345678" or "Clinical Pharmacology 2018" if known
-- "summary": 2-sentence SAR narrative citing actual sources used
-- "sources": array of source strings e.g. ["ChEMBL CHEMBL1234", "PubChem CID 5284", "ClinicalTrials.gov"]
+- "potency_table": array of up to 6 objects {endpoint, value, unit, assay, source} — ONLY use values from the ChEMBL data above; source must be "ChEMBL ${realData.chembl_id||''}"
+- "dose_response": array of 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes} — inferred from clinical trial context only
+- "admet": array of exactly 7 objects in this order: Oral Bioavailability, Half-life, Protein Binding, CYP3A4 Inhibition, hERG Liability, BBB Penetration, Renal Clearance — each {property, value, rating ("good"|"moderate"|"poor"), notes, source} — source must be "PubChem CID ${(realData.physicochemical||{}).cid||''}" or "Inferred from physicochemical data"
+- "summary": 2-sentence SAR narrative using only the provided data, no literature citations
+- "sources": array of only the real sources used e.g. ["ChEMBL CHEMBL1234", "PubChem CID 5284", "ClinicalTrials.gov"]
 
 Return ONLY valid JSON.`,
-      'You are an expert medicinal chemist. Use provided real data as primary source. Return ONLY valid JSON, no markdown.'
+      'You are an expert medicinal chemist. Use ONLY the data explicitly provided to you. NEVER invent literature references, journal citations, PMIDs, or paper titles. If data is unavailable, say so. Return ONLY valid JSON, no markdown.'
     );
 
     sar._realData = realData;
@@ -935,7 +941,28 @@ function switchTab(i, tab, el) {
 
 function srcBadgeHtml(src) {
   if (!src) return '';
-  const sc = src.toLowerCase().includes('pmid')||src.toLowerCase().includes('j med')||src.toLowerCase().includes('nature')||src.toLowerCase().includes('science')?'#c8922a':src.includes('ChEMBL')?'#2a5f9e':src.includes('PubChem')?'#2a7a52':'#6b4fa0';
+  // Only allow known real sources — reject anything that looks like a fabricated journal citation
+  const isFake = /j med|pmid|nature|science|cancer|cell|lancet|nejm|chem|biol|pharmacol|[0-9]{4},\s*[0-9]+/i.test(src) 
+    && !src.includes('ChEMBL') && !src.includes('PubChem') && !src.includes('ClinicalTrials') && !src.includes('Inferred');
+  if (isFake) return '<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:#c0392b12;color:#c0392b;border:1px solid #c0392b22;font-weight:600;">Unverified</span>';
+
+  const sc = src.includes('ChEMBL') ? '#2a5f9e' : src.includes('PubChem') ? '#2a7a52' : src.includes('ClinicalTrials') ? '#6b4fa0' : '#7a756e';
+
+  // Make ChEMBL document IDs clickable
+  const chemblDocMatch = src.match(/CHEMBL(\d+)/);
+  if (chemblDocMatch) {
+    const url = src.includes('CHEMBL') && !src.includes('CID') 
+      ? 'https://www.ebi.ac.uk/chembl/document_report_card/' + src.replace(/.*?(CHEMBL\d+).*/,'$1')
+      : 'https://www.ebi.ac.uk/chembl/compound_report_card/' + src.replace(/.*?(CHEMBL\d+).*/,'$1');
+    return `<a href="${url}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
+  }
+
+  // Make PubChem CIDs clickable
+  const pubchemMatch = src.match(/CID\s*(\d+)/);
+  if (pubchemMatch) {
+    return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
+  }
+
   return `<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${src}</span>`;
 }
 
