@@ -312,7 +312,7 @@ class Handler(BaseHTTPRequestHandler):
                 yesterday = (datetime.date.today() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
                 today = datetime.date.today().strftime("%Y-%m-%d")
                 params = urllib.parse.urlencode({
-                    "pageSize": "100", "format": "json",
+                    "pageSize": "500", "format": "json",
                     "sort": "LastUpdatePostDate:desc",
                     "filter.advanced": "AREA[LastUpdatePostDate]RANGE[" + yesterday + "," + today + "]"
                 })

@@ -130,6 +130,9 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .feed-page-btn:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); background: var(--paper2); }
 .feed-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .feed-page-info { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink4); }
+.feed-page-jump { width: 32px; font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink); background: var(--paper2); border: 1px solid var(--paper3); border-radius: 3px; padding: 2px 4px; text-align: center; outline: none; -moz-appearance: textfield; }
+.feed-page-jump::-webkit-inner-spin-button, .feed-page-jump::-webkit-outer-spin-button { -webkit-appearance: none; }
+.feed-page-jump:focus { border-color: var(--ink3); }
 .feed-total-bar { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink4); padding: 4px 12px 3px; border-bottom: 1px solid var(--paper2); flex-shrink: 0; }
 .feed-search-wrap { position: relative; padding: 8px 10px; border-bottom: 1px solid var(--paper3); flex-shrink: 0; }
 .feed-search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--ink4); pointer-events: none; }
@@ -467,9 +470,12 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
       <div class="feed-loading"><div class="feed-spinner"></div></div>
     </div>
     <div class="feed-pagination" id="feed-pagination" style="display:none">
+      <button class="feed-page-btn" id="feed-first-btn" onclick="feedJump(1)" title="First page">&#171;</button>
       <button class="feed-page-btn" id="feed-prev-btn" onclick="feedPage(-1)" disabled>&#8592;</button>
+      <input class="feed-page-jump" id="feed-page-jump" type="number" min="1" title="Jump to page" onchange="feedJumpInput(this)"/>
       <span class="feed-page-info" id="feed-page-info"></span>
       <button class="feed-page-btn" id="feed-next-btn" onclick="feedPage(1)">&#8594;</button>
+      <button class="feed-page-btn" id="feed-last-btn" onclick="feedJumpLast()" title="Last page">&#187;</button>
     </div>
   </div>
 </aside>
@@ -1204,9 +1210,11 @@ function renderFeedPage() {
 
   if (feedFiltered.length > FEED_PAGE_SIZE) {
     pagination.style.display = 'flex';
-    pageInfo.textContent = feedPage_ + ' / ' + totalPages;
+    pageInfo.textContent = feedPage_ + '/' + totalPages;
     prevBtn.disabled = feedPage_ === 1;
     nextBtn.disabled = feedPage_ === totalPages;
+    document.getElementById('feed-first-btn').disabled = feedPage_ === 1;
+    document.getElementById('feed-last-btn').disabled = feedPage_ === totalPages;
   } else {
     pagination.style.display = 'none';
   }
@@ -1222,6 +1230,25 @@ function filterFeed() {
   ) : feedData.slice();
   feedPage_ = 1;
   renderFeedPage();
+}
+
+function feedJump(page) {
+  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
+  feedPage_ = Math.max(1, Math.min(totalPages, page));
+  renderFeedPage();
+  document.getElementById('feed-list').scrollTop = 0;
+}
+
+function feedJumpLast() {
+  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
+  feedJump(totalPages);
+}
+
+function feedJumpInput(el) {
+  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
+  const val = parseInt(el.value);
+  if (!isNaN(val)) feedJump(val);
+  el.value = '';
 }
 
 function feedPage(dir) {
