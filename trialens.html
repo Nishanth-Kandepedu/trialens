@@ -722,7 +722,7 @@ async function runSearch() {
     await sleep(300);
     hideLoading();
     currentTrials = data.trials;
-    renderResults(q, data.trials);
+    renderResults(q, data.trials, data.totalCount || data.trials.length);
   } catch(e) {
     hideLoading();
     showToast('Search failed: ' + e.message);
@@ -730,20 +730,32 @@ async function runSearch() {
 }
 
 // ── RENDER RESULTS ─────────────────────────────────────────────
-function renderResults(compound, trials) {
+function renderResults(compound, trials, totalCount) {
   document.getElementById('hero-section').style.display = 'none';
   const area = document.getElementById('results-area');
   area.style.display = 'block';
+
+  const showing = trials.length;
+  const total   = totalCount || showing;
+  const isCapped = total > showing;
 
   document.getElementById('results-title').innerHTML = `Results for <em>${compound}</em>`;
 
   // Metrics
   const totalEnroll = trials.reduce((s,t) => s+(parseInt(t.enrollment)||0), 0);
-  const phases = [...new Set(trials.map(t=>t.phase).filter(Boolean))];
+  const phaseOrder = ['Phase 1', 'Phase 2', 'Phase 3', 'Phase 4'];
+  const phases = [...new Set(trials.map(t=>t.phase).filter(p => p && !['na','n/a',''].includes(p.trim().toLowerCase())))]
+    .sort((a,b) => {
+      const ai = phaseOrder.indexOf(a), bi = phaseOrder.indexOf(b);
+      return (ai===-1?99:ai) - (bi===-1?99:bi);
+    });
   const sources = [...new Set(trials.map(t=>t.source).filter(Boolean))];
+  const trialsSub = isCapped
+    ? `${showing} newest shown · ${total.toLocaleString()} total`
+    : `${total.toLocaleString()} total found`;
   document.getElementById('metrics-strip').innerHTML = `
-    <div class="metric-card mc-blue"><div class="mc-label">Trials Found</div><div class="mc-value">${trials.length}</div><div class="mc-sub">across ${sources.length} source${sources.length>1?'s':''}</div></div>
-    <div class="metric-card mc-green"><div class="mc-label">Total Enrolled</div><div class="mc-value">${totalEnroll>0?totalEnroll.toLocaleString():'—'}</div><div class="mc-sub">participants</div></div>
+    <div class="metric-card mc-blue"><div class="mc-label">Trials Found</div><div class="mc-value">${total.toLocaleString()}</div><div class="mc-sub">${trialsSub}</div></div>
+    <div class="metric-card mc-green"><div class="mc-label">Total Enrolled</div><div class="mc-value">${totalEnroll>0?totalEnroll.toLocaleString():'—'}</div><div class="mc-sub">across ${showing} shown trials</div></div>
     <div class="metric-card mc-gold"><div class="mc-label">Phase Coverage</div><div class="mc-value" style="font-size:16px;letter-spacing:-.3px;">${phases.join(' · ')||'—'}</div><div class="mc-sub">&nbsp;</div></div>
     <div class="metric-card mc-violet"><div class="mc-label">Data Sources</div><div class="mc-value">${sources.length}</div><div class="mc-sub">${sources.join(', ')}</div></div>`;
 

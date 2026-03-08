@@ -123,6 +123,7 @@ def fetch_trials(compound):
         "format": "json", "sort": "LastUpdatePostDate:desc"
     })
     data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
+    total_count = data.get("totalCount", 0)
     trials = []
     for study in data.get("studies", []):
         p = study.get("protocolSection", {})
@@ -152,7 +153,7 @@ def fetch_trials(compound):
             "primaryOutcome": primary_outcome,
             "source":       "ClinicalTrials.gov",
         })
-    return trials
+    return trials, total_count
 
 def fetch_pubchem_properties(compound):
     search_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/" + urllib.parse.quote(compound) + "/cids/JSON"
@@ -663,7 +664,8 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/trials":
             try:
-                resp = json.dumps({"trials": fetch_trials(body.get("compound",""))}).encode()
+                trials, total_count = fetch_trials(body.get("compound",""))
+                resp = json.dumps({"trials": trials, "totalCount": total_count}).encode()
             except Exception as e:
                 resp = json.dumps({"error": str(e)}).encode()
 
