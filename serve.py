@@ -135,14 +135,12 @@ def fetch_trials(compound):
         "format": "json",
         "sort": "LastUpdatePostDate:desc"
     }
-    # First: get accurate total count with pageSize=1
-    count_params = urllib.parse.urlencode({**base_params, "pageSize": "1"})
+    # countTotal=true tells the API to include totalCount in the response
+    count_params = urllib.parse.urlencode({**base_params, "pageSize": "1", "countTotal": "true"})
     try:
         count_data  = http_get("https://clinicaltrials.gov/api/v2/studies?" + count_params)
-        print(f"[Trials] API top-level keys: {list(count_data.keys())}", flush=True)
-        total_count = (count_data.get("totalCount") or count_data.get("total") or
-                       count_data.get("numFound") or count_data.get("count") or 0)
-        print(f"[Trials] totalCount='{total_count}' for '{compound}'", flush=True)
+        total_count = count_data.get("totalCount", 0)
+        print(f"[Trials] totalCount={total_count} for '{compound}'", flush=True)
     except Exception as e:
         print(f"[Trials] count fetch error: {e}", flush=True)
         total_count = 0
