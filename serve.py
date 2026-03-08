@@ -174,141 +174,162 @@ def fetch_pubchem_properties(compound):
     }, cid
 
 def fetch_pubchem_bioassay(cid):
-    """Fetch experimental bioassay data from PubChem for a given CID."""
+    """
+    Fetch bioassay data from PubChem for a given CID.
+    Captures both potency assays (IC50, Ki, EC50) AND ADMET assays.
+    This is the primary bioactivity source when ChEMBL API is unreachable.
+    """
     assays = []
     try:
-        # Get list of active assay IDs for this compound
         aid_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/assaysummary/JSON"
         data = http_get(aid_url)
         rows = data.get("Table", {}).get("Row", [])
-        # Extract ADMET-relevant assay data from summary
-        admet_keywords = ["herg", "cyp", "clearance", "half-life", "bioavail", "permeab",
-                          "protein bind", "toxicity", "ames", "metaboli", "absorption",
-                          "caco", "logp", "bbb", "pgp", "solubil", "plasma"]
-        for row in rows[:100]:  # limit to first 100
+        print(f"[PubChem] assaysummary: {len(rows)} rows for CID {cid}", flush=True)
+
+        potency_keywords = ["ic50", "ki", "ec50", "kd ", "kd,", "inhibit", "binding",
+                            "affinity", "potency", "activity", "selectiv"]
+        admet_keywords   = ["herg", "cyp", "clearance", "half-life", "bioavail", "permeab",
+                            "protein bind", "toxicity", "ames", "metaboli", "absorption",
+                            "caco", "bbb", "pgp", "solubil", "plasma", "logp", "mtt",
+                            "cytotox", "lethal", "ld50"]
+
+        for row in rows[:200]:
             cells = row.get("Cell", [])
-            if len(cells) < 8:
+            if len(cells) < 6:
                 continue
-            assay_name = str(cells[3]) if len(cells) > 3 else ""
-            outcome = str(cells[5]) if len(cells) > 5 else ""
-            activity_value = str(cells[6]) if len(cells) > 6 else ""
-            activity_unit = str(cells[7]) if len(cells) > 7 else ""
-            aid = str(cells[0]) if cells else ""
-            name_lower = assay_name.lower()
-            if any(kw in name_lower for kw in admet_keywords):
+            aid          = str(cells[0]) if cells else ""
+            assay_name   = str(cells[3]) if len(cells) > 3 else ""
+            outcome      = str(cells[5]) if len(cells) > 5 else ""
+            act_val      = str(cells[6]) if len(cells) > 6 else ""
+            act_unit     = str(cells[7]) if len(cells) > 7 else ""
+            name_lower   = assay_name.lower()
+
+            # Skip rows with no value
+            if not act_val or act_val in ("", "0", "null", "None"):
+                continue
+
+            if any(kw in name_lower for kw in potency_keywords):
                 assays.append({
-                    "type": assay_name[:60],
-                    "value": activity_value,
-                    "unit": activity_unit,
+                    "type": assay_name[:80],
+                    "value": act_val,
+                    "unit": act_unit,
                     "outcome": outcome,
-                    "aid": aid,
-                    "source": "PubChem",
+                    "reference": f"PubChem AID {aid}",
+                    "source": f"PubChem CID {cid}",
+                    "assay_category": "potency"
+                })
+            elif any(kw in name_lower for kw in admet_keywords):
+                assays.append({
+                    "type": assay_name[:80],
+                    "value": act_val,
+                    "unit": act_unit,
+                    "outcome": outcome,
+                    "reference": f"PubChem AID {aid}",
+                    "source": f"PubChem CID {cid}",
                     "assay_category": "ADME"
                 })
-    except Exception:
-        pass
-    return assays[:20]  # cap at 20 most relevant
+    except Exception as e:
+        print(f"[PubChem] bioassay error for CID {cid}: {e}", flush=True)
+    return assays[:50]
 
 def resolve_chembl_id(compound):
     """
     Resolve a compound name to a ChEMBL ID.
     Returns (chembl_id, debug_log).
-    Strategy: pref_name exact -> synonym (both field variants) -> full-text search.
-    pref_name__iexact is case-insensitive so one call covers Atenolol/ATENOLOL/atenolol.
+
+    Primary path: PubChem name -> CID -> cross-reference -> ChEMBL ID
+    This avoids direct calls to ebi.ac.uk which may be blocked by some proxies.
+    Fallback: direct ChEMBL API calls.
     """
     q = compound.strip()
     log = []
 
     def pick_best(mols, query):
-        """Return the ChEMBL ID that best matches query from a list of molecules."""
         if not mols:
             return ""
         ql = query.lower().strip()
-        # Exact pref_name match
         for m in mols:
             if (m.get("pref_name") or "").lower().strip() == ql:
                 return m.get("molecule_chembl_id", "")
-        # pref_name starts with query — shortest wins (parent compound, not salt)
         hits = sorted(
             [m for m in mols if (m.get("pref_name") or "").lower().startswith(ql)],
             key=lambda m: len(m.get("pref_name") or "")
         )
         if hits:
             return hits[0].get("molecule_chembl_id", "")
-        # query appears anywhere in pref_name
         for m in mols:
             if ql in (m.get("pref_name") or "").lower():
                 return m.get("molecule_chembl_id", "")
         return mols[0].get("molecule_chembl_id", "")
 
-    def try_url(url, label):
-        """Fetch URL, log result/error, return molecules list."""
+    # ── Path 1: PubChem name → CID → cross-ref to ChEMBL (most reliable) ────
+    try:
+        cid_url = "https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/" + urllib.parse.quote(q) + "/cids/JSON"
+        cid_data = http_get(cid_url)
+        cids = cid_data.get("IdentifierList", {}).get("CID", [])
+        if cids:
+            pubchem_cid = cids[0]
+            log.append(f"PubChem CID: {pubchem_cid}")
+            # Get cross-references from PubChem — includes ChEMBL SID/source
+            xref_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{pubchem_cid}/xrefs/RegistryID/JSON"
+            xref_data = http_get(xref_url)
+            reg_ids = xref_data.get("InformationList", {}).get("Information", [{}])[0].get("RegistryID", [])
+            for rid in reg_ids:
+                if str(rid).upper().startswith("CHEMBL"):
+                    log.append(f"Found via PubChem xref: {rid}")
+                    print(f"[ChEMBL] '{compound}' -> '{rid}' via PubChem xref", flush=True)
+                    return rid, log
+            log.append(f"PubChem xref: no ChEMBL ID in {len(reg_ids)} registry IDs")
+        else:
+            log.append("PubChem: no CID found")
+    except Exception as e:
+        log.append(f"PubChem xref ERROR: {e}")
+        print(f"[ChEMBL] PubChem xref error for '{compound}': {e}", flush=True)
+
+    # ── Path 2: UniChem (different subdomain from ChEMBL API, often not blocked) ─
+    try:
+        # UniChem source 1 = ChEMBL
+        unichem_url = "https://www.ebi.ac.uk/unichem/rest/orphanIdSearch/search?searchTerm=" + urllib.parse.quote(q)
+        # Actually use the compound name → InChI → ChEMBL approach via UniChem
+        # Simpler: use UniChem's name search endpoint
+        unichem_url = "https://www.ebi.ac.uk/unichem/api/v1/compounds?name=" + urllib.parse.quote(q) + "&type=name"
+        uc_data = http_get(unichem_url)
+        compounds_list = uc_data.get("compounds", []) if isinstance(uc_data, dict) else []
+        for c in compounds_list[:3]:
+            for src in (c.get("sources") or []):
+                if (src.get("shortName") or "").upper() == "CHEMBL":
+                    cid = src.get("compoundId", "")
+                    if cid:
+                        log.append(f"UniChem match: {cid}")
+                        print(f"[ChEMBL] '{compound}' -> '{cid}' via UniChem", flush=True)
+                        return cid, log
+        log.append(f"UniChem: no match")
+    except Exception as e:
+        log.append(f"UniChem ERROR: {e}")
+        print(f"[ChEMBL] UniChem error for '{compound}': {e}", flush=True)
+
+    # ── Path 3: Direct ChEMBL API (may be blocked) ───────────────────────────
+    BASE = "https://www.ebi.ac.uk/chembl/api/data"
+    for endpoint, label in [
+        (f"{BASE}/molecule?pref_name__iexact={urllib.parse.quote(q)}&format=json&limit=3", "chembl_pref"),
+        (f"{BASE}/molecule/search?q={urllib.parse.quote(q)}&format=json&limit=10", "chembl_search"),
+    ]:
         try:
-            resp = http_get(url)
+            resp = http_get(endpoint)
             mols = resp.get("molecules", [])
-            names = [m.get("pref_name", "?") for m in mols[:5]]
+            names = [m.get("pref_name", "?") for m in mols[:4]]
             log.append(f"{label}: {len(mols)} results {names}")
             print(f"[ChEMBL] {label}: {len(mols)} results {names}", flush=True)
-            return mols
+            cid = pick_best(mols, q)
+            if cid:
+                log.append(f"MATCHED via {label}: {cid}")
+                print(f"[ChEMBL] '{compound}' -> '{cid}' via {label}", flush=True)
+                return cid, log
         except Exception as e:
             log.append(f"{label} ERROR: {e}")
-            print(f"[ChEMBL] {label} ERROR: {e}", flush=True)
-            return None  # None = error (different from [] = empty response)
+            print(f"[ChEMBL] {label} error: {e}", flush=True)
 
-    # Build variants — hyphen stripping for research codes only
-    variants = [q]
-    if '-' in q:
-        variants += [q.replace('-', ''), q.replace('-', ' ')]
-    # Deduplicate
-    seen, uniq = set(), []
-    for v in variants:
-        if v not in seen:
-            seen.add(v); uniq.append(v)
-
-    BASE = "https://www.ebi.ac.uk/chembl/api/data"
-
-    for v in uniq:
-        # 1. pref_name exact (case-insensitive — covers ATENOLOL, Atenolol, atenolol)
-        mols = try_url(f"{BASE}/molecule?pref_name__iexact={urllib.parse.quote(v)}&format=json&limit=3",
-                       f"pref_name('{v}')")
-        if mols:
-            cid = pick_best(mols, v)
-            if cid:
-                log.append(f"MATCHED via pref_name: {cid}")
-                print(f"[ChEMBL] '{compound}' -> '{cid}' via pref_name", flush=True)
-                return cid, log
-
-        # 2a. Synonym search — ChEMBL field is molecule_synonyms__synonyms (plural)
-        mols = try_url(f"{BASE}/molecule?molecule_synonyms__synonyms__iexact={urllib.parse.quote(v)}&format=json&limit=5",
-                       f"synonym_plural('{v}')")
-        if mols:
-            cid = pick_best(mols, v)
-            if cid:
-                log.append(f"MATCHED via synonym: {cid}")
-                print(f"[ChEMBL] '{compound}' -> '{cid}' via synonym", flush=True)
-                return cid, log
-
-        # 2b. Synonym search — also try singular field name (API versions differ)
-        mols = try_url(f"{BASE}/molecule?molecule_synonyms__synonym__iexact={urllib.parse.quote(v)}&format=json&limit=5",
-                       f"synonym_singular('{v}')")
-        if mols:
-            cid = pick_best(mols, v)
-            if cid:
-                log.append(f"MATCHED via synonym_singular: {cid}")
-                print(f"[ChEMBL] '{compound}' -> '{cid}' via synonym_singular", flush=True)
-                return cid, log
-
-    # 3. Full-text search — tries original name only (avoid too many slow calls)
-    mols = try_url(f"{BASE}/molecule/search?q={urllib.parse.quote(q)}&format=json&limit=15",
-                   f"fulltext('{q}')")
-    if mols:
-        cid = pick_best(mols, q)
-        if cid:
-            log.append(f"MATCHED via fulltext: {cid}")
-            print(f"[ChEMBL] '{compound}' -> '{cid}' via fulltext", flush=True)
-            return cid, log
-
-    print(f"[ChEMBL] '{compound}' NOT FOUND. Full log: {log}", flush=True)
+    print(f"[ChEMBL] '{compound}' NOT FOUND. Log: {log}", flush=True)
     return "", log
 
 
@@ -340,6 +361,7 @@ def fetch_real_sar_data(compound):
                         })
             except Exception as e:
                 result["chembl_potency_error"] = str(e)
+                print(f"[ChEMBL] potency fetch BLOCKED: {e}", flush=True)
 
             # ADME assays (assay_type=A covers ADME in ChEMBL)
             try:
@@ -397,15 +419,16 @@ def fetch_real_sar_data(compound):
             result["pubchem_cid"] = cid
             result["sources"].append("PubChem (CID " + str(cid) + ")")
 
-            # Also fetch PubChem bioassay ADMET data
+            # Fetch PubChem bioassay data (potency + ADMET)
             try:
                 pubchem_assays = fetch_pubchem_bioassay(cid)
                 if pubchem_assays:
                     result["adme_data"].extend(pubchem_assays)
                     result["bioactivity"].extend(pubchem_assays)
                     result["sources"].append("PubChem BioAssay")
-            except Exception:
-                pass
+                print(f"[PubChem] bioassay fetch: {len(pubchem_assays)} assays", flush=True)
+            except Exception as e:
+                print(f"[PubChem] bioassay error: {e}", flush=True)
     except Exception as e:
         result["pubchem_error"] = str(e)
 
