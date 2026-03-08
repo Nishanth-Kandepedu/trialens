@@ -1551,61 +1551,19 @@ let feedSearchActive = false;
 function handleFeedSearch() {
   const q = document.getElementById('feed-search-input').value.trim();
   clearTimeout(feedSearchTimer);
-  const panel = document.getElementById('feed-search-results');
-
   if (!q) {
     closeFeedSearch();
     filterFeed();
     return;
   }
-
-  // Check local matches WITHOUT touching feedFiltered or the feed list
-  const ql = q.toLowerCase();
-  const localMatches = feedData.filter(t =>
-    (t.id||'').toLowerCase().includes(ql) ||
-    (t.title||'').toLowerCase().includes(ql) ||
-    (t.conditions||'').toLowerCase().includes(ql) ||
-    (t.sponsor||'').toLowerCase().includes(ql)
-  );
-
-  if (localMatches.length > 0) {
-    // Found in local feed — filter it and hide dropdown
-    filterFeed();
-    panel.style.display = 'none';
-    return;
-  }
-
-  // Not in local feed — keep feed list intact, show dropdown CTA
-  // Reset feed to show all (don't filter to zero)
-  feedFiltered = feedData.slice();
-  feedPage_ = 1;
-  renderFeedPage();
-
-  panel.style.display = 'block';
-  panel.innerHTML = `
-    <div style="padding:12px 14px;">
-      <div style="font-size:12px;color:var(--ink2);font-weight:600;margin-bottom:6px;">
-        "<em>${q}</em>" not found in recent 48h feed
-      </div>
-      <div style="font-size:11px;color:var(--ink3);margin-bottom:10px;">
-        Search the full ClinicalTrials.gov database instead?
-      </div>
-      <button onclick="runLiveNctSearch('${q.replace(/'/g, "\'")}')" style="width:100%;padding:7px 12px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">
-        Search ClinicalTrials.gov for "${q}"
-      </button>
-    </div>`;
+  filterFeed();
+  feedSearchTimer = setTimeout(() => runLiveNctSearch(q), 400);
 }
 
 async function runLiveNctSearch(q) {
   const panel = document.getElementById('feed-search-results');
   panel.style.display = 'block';
-  panel.innerHTML = `
-    <div style="padding:12px 14px;">
-      <div style="font-size:11px;color:var(--ink3);margin-bottom:8px;">Searching ClinicalTrials.gov…</div>
-      <div style="height:3px;background:var(--paper3);border-radius:2px;overflow:hidden;">
-        <div style="height:100%;width:60%;background:var(--blue);border-radius:2px;animation:shimmer 1s infinite;"></div>
-      </div>
-    </div>`;
+  panel.innerHTML = '<div class="feed-search-loading">Searching ClinicalTrials.gov…</div>';
   try {
     const res = await fetch('/api/nct-search', {
       method: 'POST',
@@ -1614,24 +1572,17 @@ async function runLiveNctSearch(q) {
     });
     const data = await res.json();
     if (!data.trials || !data.trials.length) {
-      panel.innerHTML = `
-        <div style="padding:12px 14px;">
-          <div style="font-size:12px;color:var(--ink2);font-weight:600;margin-bottom:4px;">No trials found for "${q}"</div>
-          <div style="font-size:11px;color:var(--ink3);">Not found on ClinicalTrials.gov either.</div>
-        </div>`;
+      panel.innerHTML = '<div class="feed-search-none">No drug trials found for "' + q + '"</div>';
       return;
     }
-    panel.innerHTML = `
-      <div style="padding:8px 12px 4px;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ink4);border-bottom:1px solid var(--paper2);">
-        ${data.trials.length} result${data.trials.length>1?'s':''} on ClinicalTrials.gov
-      </div>` +
-      data.trials.map(t => `
-        <div class="feed-search-result-item" onclick="openNctResult('${t.url}')">
-          <div class="feed-sr-nct">${t.id} <span style="font-weight:400;color:var(--ink3)">${t.phase || ''}</span></div>
-          <div class="feed-sr-title">${t.title}</div>
-          <div class="feed-sr-meta">${t.conditions || ''} · ${t.sponsor || ''}</div>
-          <div class="feed-sr-source">↗ ClinicalTrials.gov · ${t.status}</div>
-        </div>`).join('');
+    panel.innerHTML = data.trials.map(t => `
+      <div class="feed-search-result-item" onclick="openNctResult('${t.url}')">
+        <div class="feed-sr-nct">${t.id} <span style="font-weight:400;color:var(--ink3)">${t.phase || ''}</span></div>
+        <div class="feed-sr-title">${t.title}</div>
+        <div class="feed-sr-meta">${t.conditions || ''} · ${t.sponsor || ''}</div>
+        <div class="feed-sr-source">↗ ClinicalTrials.gov · ${t.status}</div>
+      </div>
+    `).join('');
   } catch(e) {
     panel.innerHTML = '<div class="feed-search-none">Search failed. Try again.</div>';
   }
