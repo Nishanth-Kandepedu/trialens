@@ -822,21 +822,19 @@ async function generateSAR(i) {
   const t = currentTrials[i];
   const btn = document.getElementById('gen-btn-'+i);
   const progressEl = document.getElementById('sar-progress-'+i);
+  const labelEl = document.getElementById('prog-label-'+i);
+  const barEl = document.getElementById('prog-bar-'+i);
   btn.disabled = true;
   progressEl.classList.add('active');
 
-  const steps = ['Fetching ChEMBL bioactivity data', 'Fetching PubChem properties', 'Cross-referencing sources', 'Compiling structure-activity relationships', 'Writing SAR narrative'];
-  const labelEl = document.getElementById('prog-label-'+i);
-  const barEl = document.getElementById('prog-bar-'+i);
-
-  for (let j=0; j<steps.length; j++) {
-    if (labelEl) labelEl.textContent = steps[j];
-    if (barEl) barEl.style.width = ((j+1)/steps.length * 60) + '%';
-    await sleep(320);
-  }
+  const setProgress = (pct, label) => {
+    if (labelEl) labelEl.textContent = label;
+    if (barEl) barEl.style.width = pct + '%';
+  };
 
   try {
-    // Fetch real bioactivity data from ChEMBL + PubChem
+    // Step 1: Fetch all real data from ChEMBL + PubChem
+    setProgress(15, 'Searching ChEMBL for ' + currentCompound + '...');
     const chemblRes = await fetch('/api/chembl', {
       method: 'POST',
       headers: {'Content-Type': 'application/json'},
@@ -844,71 +842,121 @@ async function generateSAR(i) {
     });
     const realData = await chemblRes.json();
 
-    const allBio = realData.bioactivity || [];
-    const admeDataRaw = realData.adme_data || [];
-    const potencyTypes = ['IC50','Ki','EC50','Kd','GI50','MIC','CC50'];
-    const potencyData = allBio.filter(a => a.assay_category === 'potency' || potencyTypes.includes(a.type));
-    const admeData = admeDataRaw.length > 0 ? admeDataRaw : allBio.filter(a => a.assay_category === 'ADME' || a.assay_category === 'toxicity');
-    const bioLines = potencyData.map(a =>
-      `${a.type}: ${a.value} ${a.unit} [${a.assay||'binding assay'}] (${a.source||'ChEMBL'} ref: ${a.reference||''})`
-    ).join('\n') || 'No potency data found in ChEMBL';
-    const admeLines = admeData.map(a =>
-      `${a.type}: ${a.value} ${a.unit} [${a.assay||'ADME assay'}] (${a.source||'ChEMBL/PubChem'} ref: ${a.reference||a.aid||''})`
-    ).join('\n') || 'No experimental ADME/tox data found';
+    setProgress(35, 'Processing bioactivity data...');
+    await sleep(200);
 
+    // Separate potency vs ADME data
+    const allBio = realData.bioactivity || [];
+    const admeRaw = realData.adme_data || [];
+    const potencyTypes = new Set(['IC50','Ki','EC50','Kd','GI50','MIC','CC50','AC50','Potency']);
+    const potencyData = allBio.filter(a => a.assay_category === 'potency' || potencyTypes.has(a.type));
+    const admeData = admeRaw.length > 0 ? admeRaw : allBio.filter(a => ['ADME','toxicity'].includes(a.assay_category));
+
+    // Build structured data lines for Claude — only real values, no ranges
+    const cleanVal = v => v && !String(v).match(/^\d+[-–]\d+$/) && String(v) !== 'null';
+    const potencyLines = potencyData
+      .filter(a => cleanVal(a.value))
+      .map(a => `${a.type}=${a.value} ${a.unit} | assay: ${(a.assay||'').substring(0,60)} | ref: ${a.reference||''}`)
+      .join('\n') || 'NONE';
+    const admeLines = admeData
+      .filter(a => cleanVal(a.value))
+      .map(a => `${a.type}=${a.value} ${a.unit} | assay: ${(a.assay||'').substring(0,60)} | ref: ${a.reference||a.aid||''}`)
+      .join('\n') || 'NONE';
+
+    // Physicochemical from PubChem
     const pc = realData.physicochemical || {};
     const pcid = realData.pubchem_cid || '';
-    const pcLines = pc.molecular_weight ? [
-      `Molecular Weight: ${pc.molecular_weight} Da [PubChem CID ${pcid}]`,
-      `LogP (XLogP): ${pc.logp ?? 'N/A'} [PubChem]`,
-      `H-Bond Donors: ${pc.hbd ?? 'N/A'} [PubChem]`,
-      `H-Bond Acceptors: ${pc.hba ?? 'N/A'} [PubChem]`,
-      `Rotatable Bonds: ${pc.rotatable_bonds ?? 'N/A'} [PubChem]`,
-      `TPSA: ${pc.tpsa ?? 'N/A'} Å² [PubChem]`,
-      `Heavy Atoms: ${pc.heavy_atoms ?? 'N/A'} [PubChem]`,
-    ].join('\n') : 'No PubChem data found';
+    const physLines = pc.molecular_weight ? [
+      `MW=${pc.molecular_weight} Da`,
+      `LogP=${pc.logp ?? 'N/A'}`,
+      `TPSA=${pc.tpsa ?? 'N/A'} Å²`,
+      `HBD=${pc.hbd ?? 'N/A'}`,
+      `HBA=${pc.hba ?? 'N/A'}`,
+      `RotBonds=${pc.rotatable_bonds ?? 'N/A'}`,
+    ].join(' | ') : 'NONE';
 
-    const sources = (realData.sources || []).join(', ') || 'Claude training data only';
+    // Clinical context from trial
+    const clinicalContext = [
+      `Phase: ${t.phase||'N/A'}`,
+      `Status: ${t.status||'N/A'}`,
+      `Condition: ${(t.conditions||[]).join(', ')||t.conditions||'N/A'}`,
+      `Sponsor: ${t.sponsor||'N/A'}`,
+      `Enrollment: ${t.enrollment||'N/A'} participants`,
+      `Primary Outcome: ${t.primaryOutcome||'N/A'}`,
+      `Start: ${t.startDate||'N/A'}`,
+      `Completion: ${t.completionDate||'N/A'}`,
+    ].join('\n');
+
+    setProgress(55, 'Compiling SAR profile with Claude...');
+
+    const hasPotency = potencyLines !== 'NONE';
+    const hasAdme = admeLines !== 'NONE';
+    const hasPhys = physLines !== 'NONE';
 
     const sar = await callClaude(
-      `You are synthesising a SAR report for ${currentCompound} using ONLY the verified database sources provided below.
+`You are generating a structured SAR/pharmacology report for the compound "${currentCompound}".
+You have been given REAL experimental data from databases. Use ONLY this data — never fabricate values.
 
-CRITICAL RULES — YOU MUST FOLLOW THESE EXACTLY:
-1. NEVER invent, guess, or hallucinate literature references, journal names, PMIDs, or paper titles.
-2. For "source" fields, ONLY use one of: "ChEMBL ${realData.chembl_id||''}", "PubChem CID ${realData.pubchem_cid||''}", "ClinicalTrials.gov", or "Inferred from physicochemical data". Nothing else.
-3. If a value is not in the provided data, say "Not available" — do NOT fabricate a number.
-4. Do NOT cite any journal, paper, PMID, or author under any circumstance.
+━━ REAL DATA AVAILABLE ━━
 
-REAL POTENCY DATA (ChEMBL ${realData.chembl_id || 'not found'}):
-${bioLines}
+[POTENCY DATA — ChEMBL ${realData.chembl_id||'not found'}]
+${potencyLines}
 
-REAL ADME DATA (ChEMBL ${realData.chembl_id || 'not found'}):
+[ADME/TOX DATA — ChEMBL ${realData.chembl_id||'not found'}]
 ${admeLines}
 
-REAL PHYSICOCHEMICAL DATA (PubChem):
-${pcLines}
+[PHYSICOCHEMICAL — PubChem CID ${pcid||'not found'}]
+${physLines}
 
-CLINICAL TRIAL CONTEXT (ClinicalTrials.gov):
-Phase: ${t.phase}, Status: ${t.status}, Conditions: ${t.conditions}
-Primary Outcome: ${t.primaryOutcome}
+[CLINICAL TRIAL — ClinicalTrials.gov]
+${clinicalContext}
 
-Generate a JSON object with EXACTLY these keys:
-- "potency_table": array of objects {endpoint, value, unit, assay, chembl_assay_id, source} — ONLY include rows where you have a real single numeric value from the ChEMBL potency data above. DO NOT include ranges (e.g. "160-165"), averages, or inferred values. Each row must map to exactly one data point. chembl_assay_id must be the ChEMBL document ref (e.g. CHEMBL2040800). If no real potency data exists, return empty array [].
-- "dose_response": array of up to 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes} — inferred from clinical trial context only; if insufficient context return []
-- "admet": array of objects — ONLY include properties where you have a real value from ChEMBL ADME data or PubChem above. DO NOT include rows with "Not available" or inferred values unless real physicochemical data supports a specific prediction. Each object: {property, value, unit, rating ("good"|"moderate"|"poor"), notes, source} where source is the exact ChEMBL document ref or "PubChem CID ${realData.pubchem_cid||''}" . If no real ADME data exists for a property, omit it entirely.
-- "summary": 2-sentence SAR narrative using only the provided data, explicitly stating which data sources were found and which were absent
-- "sources": array of only the real sources used e.g. ["ChEMBL CHEMBL1234", "PubChem CID 5284", "ClinicalTrials.gov"]
+━━ INSTRUCTIONS ━━
 
-Return ONLY valid JSON.`,
-      'You are an expert medicinal chemist. Use ONLY the data explicitly provided to you. NEVER invent literature references, journal citations, PMIDs, or paper titles. If data is unavailable, say so. Return ONLY valid JSON, no markdown.'
+Return a JSON object with these exact keys:
+
+"potency_table": Array of objects from POTENCY DATA only. Each object: {endpoint, value, unit, assay, ref, source}
+- endpoint: the measurement type (IC50, Ki, etc.)
+- value: EXACT single numeric value only — NEVER a range like "100-200"
+- unit: nM, uM, % etc.
+- assay: short assay description
+- ref: the ChEMBL document ID (e.g. CHEMBL2040800)
+- source: "ChEMBL ${realData.chembl_id||''}"
+- If POTENCY DATA is NONE → return []
+
+"dose_response": Array of dose-response points inferred ONLY from clinical trial context (enrollment, phase, outcomes, conditions). Each object: {dose, response_rate, toxicity_grade, notes}
+- dose: a realistic dose string based on the trial phase and condition (e.g. "100 mg QD")
+- response_rate: integer 0-100 representing estimated efficacy based on trial outcome language
+- toxicity_grade: integer 1-3 based on trial phase/safety language
+- notes: brief rationale citing the trial context
+- Always provide 3-4 rows using clinical context — this is always possible from trial data
+
+"admet": Array from ADME/TOX DATA only. Each object: {property, value, unit, rating, notes, source}
+- property: standardised name (Half-life, Clearance, AUC, Protein Binding, hERG IC50, etc.)
+- value: EXACT numeric value from the data
+- unit: the unit
+- rating: "good", "moderate", or "poor" — based on the actual value
+- notes: brief interpretation of the actual value
+- source: the ChEMBL document ID or "PubChem CID ${pcid}"
+- If ADME/TOX DATA is NONE → return []
+- DO NOT include physicochemical properties (MW, LogP, TPSA) in this array
+
+"physicochemical": ${hasPhys ? `Object with these exact keys from the PubChem data: {mw, logp, tpsa, hbd, hba, rot_bonds} — fill from PHYSICOCHEMICAL data above` : 'null'}
+
+"summary": 3-sentence narrative covering: (1) what potency/ADME data was found and key values, (2) clinical context interpretation, (3) what data gaps exist. Be specific about values found or absent.
+
+"sources": Array of source strings actually used, e.g. ["ChEMBL ${realData.chembl_id||''}", "PubChem CID ${pcid}", "ClinicalTrials.gov NCT${t.nctId||''}"]
+
+Return ONLY valid JSON. No markdown, no explanation.`,
+      'You are an expert medicinal chemist and pharmacologist. Use ONLY the data provided. Never fabricate values, ranges, or journal citations. Return ONLY valid JSON.'
     );
 
+    setProgress(90, 'Rendering results...');
     sar._realData = realData;
-    sar._sources = sar.sources || [sources];
+    sar._sources = sar.sources || (realData.sources || []);
     sarCache[i] = sar;
-    const barFinal = document.getElementById('prog-bar-'+i);
-    if (barFinal) barFinal.style.width = '100%';
-    await sleep(300);
+    if (barEl) barEl.style.width = '100%';
+    await sleep(200);
     progressEl.classList.remove('active');
     renderSARResults(i, sar);
   } catch(e) {
@@ -1023,15 +1071,18 @@ function renderPotency(i, sar) {
       </tr>`;
     }).join('');
 
+  const noPotency = !realRows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No bioactivity data found in ChEMBL for this compound. This may be because the compound is novel, proprietary, or registered under a different name.</div>' : '';
+
   return `
     <div class="sec-lbl">Potency & Efficacy</div>
-    <div class="stat-cards stat-cards-4">${cards}</div>
+    ${noPotency}
+    ${realRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
     <table class="potency-table">
       <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Source</th></tr></thead>
       <tbody>${tableRows}</tbody>
     </table>
-    </div>`;
+    </div>` : ''}`;
 }
 
 function renderDose(i, sar) {
@@ -1046,6 +1097,7 @@ function renderDose(i, sar) {
   const toxLabel = maxTox<=1?'Low':maxTox<=2?'Moderate':'High';
   const toxColor = gc(maxTox);
 
+  if (!rows.length) return `<div class="sec-lbl">Dose-Response</div><div style="padding:24px;color:var(--ink3);font-size:13px;">No dose-response data available from clinical trial context.</div>`;
   const cards = [
     { label:'Max Response', value: maxResp+'%', unit:'', sub:'At highest dose', pct: maxResp, color:'#2a5f9e' },
     { label:'Min Response', value: minResp+'%', unit:'', sub:'At lowest dose',  pct: minResp, color:'#2a7a52' },
@@ -1059,9 +1111,7 @@ function renderDose(i, sar) {
       <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
     </div>`).join('');
 
-  const tableRows = rows
-    .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A')
-    .map(r=>`
+  const tableRows = rows.map(r=>`
     <tr>
       <td class="d-dose">${r.dose||''}</td>
       <td class="d-rate">${r.response_rate||0}%</td>
@@ -1085,7 +1135,8 @@ function renderDose(i, sar) {
 }
 
 function renderAdmet(i, sar) {
-  const rows = (sar.admet||[]);
+  const rows = (sar.admet||[]).filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A');
+  const pc = sar.physicochemical || null;
   const rmap = {good:3, moderate:2, poor:1};
   const barColor = r => r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a';
   const ri = r => r==='good'?'▲':r==='poor'?'▼':'●';
@@ -1121,13 +1172,23 @@ function renderAdmet(i, sar) {
     <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Notes</span>
   </div>`;
 
+  const noAdmet = !rows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL or PubChem for this compound.</div>' : '';
+
+  const physSection = pc ? `
+    <div class="sec-lbl" style="margin-top:24px;">Physicochemical Properties <span style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--ink3);font-weight:400;">PubChem</span></div>
+    <div style="display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:8px;">
+      ${[['MW', pc.mw, 'Da'],['LogP', pc.logp,''],['TPSA', pc.tpsa,'Å²'],['HBD', pc.hbd,''],['HBA', pc.hba,''],['Rot. Bonds', pc.rot_bonds,'']].filter(([,v])=>v!=null&&v!=='N/A').map(([k,v,u])=>`
+        <div style="background:var(--paper2);border:1px solid var(--paper3);border-radius:6px;padding:10px 12px;">
+          <div style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--ink3);text-transform:uppercase;letter-spacing:.5px;">${k}</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);margin-top:2px;">${v}<span style="font-size:11px;font-weight:400;color:var(--ink3);margin-left:3px;">${u}</span></div>
+        </div>`).join('')}
+    </div>` : '';
+
   return `
     <div class="sec-lbl">ADMET Properties</div>
-    <div class="admet-score-grid">${scorecards}</div>
-    ${hdr}
-    <div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">
-      ${admetRows}
-    </div>`;
+    ${noAdmet}
+    ${rows.length ? `<div class="admet-score-grid">${scorecards}</div>${hdr}<div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">${admetRows}</div>` : ''}
+    ${physSection}`;
 }
 
 function renderNarrative(i, sar) {
