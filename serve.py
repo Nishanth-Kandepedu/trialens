@@ -301,6 +301,51 @@ class Handler(BaseHTTPRequestHandler):
             self.send_json({"success": ok})
             return
 
+        # ── NCT SEARCH ──
+        if path == "/api/nct-search":
+            try:
+                q = body.get("query", "").strip()
+                if not q:
+                    self.send_json({"trials": []})
+                    return
+                # Search by NCT ID or keyword across title/condition/intervention
+                params = urllib.parse.urlencode({
+                    "pageSize": "20", "format": "json",
+                    "sort": "LastUpdatePostDate:desc",
+                    "query.term": q,
+                    "filter.advanced": "AREA[StudyType]INTERVENTIONAL AND AREA[InterventionType]DRUG"
+                })
+                data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
+                trials = []
+                for study in data.get("studies", []):
+                    p = study.get("protocolSection", {})
+                    ident   = p.get("identificationModule", {})
+                    status  = p.get("statusModule", {})
+                    design  = p.get("designModule", {})
+                    sponsor = p.get("sponsorCollaboratorsModule", {})
+                    conds   = p.get("conditionsModule", {})
+                    phases  = design.get("phases", [])
+                    phase_str = phases[0].replace("PHASE","Phase ").replace("_"," ") if phases else ""
+                    raw_status = status.get("overallStatus","")
+                    last_update = status.get("lastUpdatePostDateStruct",{}).get("date","")
+                    start = status.get("startDateStruct",{}).get("date","")
+                    nct_id = ident.get("nctId","")
+                    trials.append({
+                        "id": nct_id,
+                        "title": ident.get("briefTitle",""),
+                        "conditions": ", ".join(conds.get("conditions",[])[:2]),
+                        "sponsor": sponsor.get("leadSponsor",{}).get("name",""),
+                        "status": raw_status.replace("_"," ").title(),
+                        "phase": phase_str,
+                        "lastUpdate": last_update,
+                        "startDate": start[:7] if start else "",
+                        "url": "https://clinicaltrials.gov/study/" + nct_id,
+                    })
+                self.send_json({"trials": trials, "source": "ClinicalTrials.gov", "total": len(trials)})
+            except Exception as e:
+                self.send_json({"error": str(e), "trials": []})
+            return
+
         # ── PROTECTED API ROUTES ──
         if not is_valid_session(token):
             self.send_json({"error": "Unauthorised"}, 401)
@@ -309,7 +354,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/feed":
             try:
                 import datetime
-                yesterday = (datetime.date.today() - datetime.timedelta(days=3)).strftime("%Y-%m-%d")
+                yesterday = (datetime.date.today() - datetime.timedelta(days=2)).strftime("%Y-%m-%d")
                 today = datetime.date.today().strftime("%Y-%m-%d")
                 params = urllib.parse.urlencode({
                     "pageSize": "500", "format": "json",
