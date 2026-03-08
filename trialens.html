@@ -844,9 +844,16 @@ async function generateSAR(i) {
     });
     const realData = await chemblRes.json();
 
-    const bioLines = (realData.bioactivity || []).map(a =>
-      `${a.type}: ${a.value} ${a.unit} [${a.assay||'binding assay'}] — ChEMBL ref: ${a.reference||''}` 
-    ).join('\n') || 'No ChEMBL bioactivity data found';
+    const allBio = realData.bioactivity || [];
+    const potencyTypes = ['IC50','Ki','EC50','Kd','GI50','MIC','CC50'];
+    const potencyData = allBio.filter(a => potencyTypes.includes(a.type));
+    const admeData = allBio.filter(a => a.assay_category === 'ADME' || !potencyTypes.includes(a.type));
+    const bioLines = potencyData.map(a =>
+      `${a.type}: ${a.value} ${a.unit} [${a.assay||'binding assay'}] — ChEMBL ref: ${a.reference||''}`
+    ).join('\n') || 'No ChEMBL potency data found';
+    const admeLines = admeData.map(a =>
+      `${a.type}: ${a.value} ${a.unit} [${a.assay||'ADME assay'}] — ChEMBL ref: ${a.reference||''}`
+    ).join('\n') || 'No ChEMBL ADME data found';
 
     const pc = realData.physicochemical || {};
     const pcid = realData.pubchem_cid || '';
