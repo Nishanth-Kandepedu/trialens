@@ -200,53 +200,99 @@ def fetch_pubchem_bioassay(cid):
         pass
     return assays[:20]  # cap at 20 most relevant
 
+def resolve_chembl_id(compound):
+    """
+    Robustly resolve a compound name to a ChEMBL ID.
+    Tries pref_name exact → synonym exact → full-text search.
+    """
+    q = compound.strip()
+
+    def pick_best(mols, query):
+        if not mols:
+            return ""
+        ql = query.lower().strip()
+        # Exact pref_name match
+        for m in mols:
+            if (m.get("pref_name") or "").lower().strip() == ql:
+                return m.get("molecule_chembl_id", "")
+        # pref_name starts with query — prefer shortest (parent over salt)
+        hits = [m for m in mols if (m.get("pref_name") or "").lower().startswith(ql)]
+        if hits:
+            hits.sort(key=lambda m: len(m.get("pref_name") or ""))
+            return hits[0].get("molecule_chembl_id", "")
+        # query appears anywhere in pref_name
+        for m in mols:
+            if ql in (m.get("pref_name") or "").lower():
+                return m.get("molecule_chembl_id", "")
+        return mols[0].get("molecule_chembl_id", "")
+
+    # Build name variants
+    variants = [q]
+    if '-' in q:
+        variants += [q.replace('-', ''), q.replace('-', ' ')]
+    variants += [q.lower(), q.upper(), q.title()]
+    seen, uniq = set(), []
+    for v in variants:
+        if v not in seen:
+            seen.add(v)
+            uniq.append(v)
+    variants = uniq
+
+    # Pass 1: pref_name exact match for each variant
+    for v in variants:
+        try:
+            url = "https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=" + urllib.parse.quote(v) + "&format=json&limit=1"
+            mols = http_get(url).get("molecules", [])
+            if mols:
+                cid = mols[0].get("molecule_chembl_id", "")
+                if cid:
+                    print(f"[ChEMBL] '{compound}' -> '{cid}' via pref_name('{v}')", flush=True)
+                    return cid
+        except Exception:
+            pass
+
+    # Pass 2: synonym exact match for each variant
+    for v in variants:
+        try:
+            url = "https://www.ebi.ac.uk/chembl/api/data/molecule?molecule_synonyms__synonyms__iexact=" + urllib.parse.quote(v) + "&format=json&limit=5"
+            mols = http_get(url).get("molecules", [])
+            cid = pick_best(mols, v)
+            if cid:
+                print(f"[ChEMBL] '{compound}' -> '{cid}' via synonym('{v}')", flush=True)
+                return cid
+        except Exception:
+            pass
+
+    # Pass 3: full-text search (research codes, trade names)
+    for v in variants[:3]:
+        try:
+            url = "https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=" + urllib.parse.quote(v) + "&format=json&limit=10"
+            mols = http_get(url).get("molecules", [])
+            cid = pick_best(mols, v)
+            if cid:
+                print(f"[ChEMBL] '{compound}' -> '{cid}' via search('{v}')", flush=True)
+                return cid
+        except Exception:
+            pass
+
+    print(f"[ChEMBL] '{compound}' -> NOT FOUND", flush=True)
+    return ""
+
+
 def fetch_real_sar_data(compound):
     result = {"bioactivity": [], "adme_data": [], "sources": [], "physicochemical": None}
 
     # ── ChEMBL: Potency + ADME ──────────────────────────────────────────────
     try:
-        chembl_id = ""
+        chembl_id = resolve_chembl_id(compound)
 
-        # Strategy 1: ChEMBL full-text search — searches ALL synonyms, trade names, research codes
-        try:
-            search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=" + urllib.parse.quote(compound) + "&format=json&limit=5"
-            mol_data = http_get(search_url)
-            mols = mol_data.get("molecules", [])
-            if mols:
-                chembl_id = mols[0].get("molecule_chembl_id", "")
-        except Exception:
-            pass
-
-        # Strategy 2: pref_name exact match (fast fallback)
-        if not chembl_id:
-            try:
-                search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=" + urllib.parse.quote(compound) + "&format=json&limit=1"
-                mol_data = http_get(search_url)
-                mols = mol_data.get("molecules", [])
-                if mols:
-                    chembl_id = mols[0].get("molecule_chembl_id", "")
-            except Exception:
-                pass
-
-        # Strategy 3: try without hyphens (ARV-471 → ARV471, MMV-390048 → MMV390048)
-        if not chembl_id and '-' in compound:
-            for variant in [compound.replace('-', ''), compound.replace('-', ' ')]:
-                try:
-                    search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=" + urllib.parse.quote(variant) + "&format=json&limit=3"
-                    mol_data = http_get(search_url)
-                    mols = mol_data.get("molecules", [])
-                    if mols:
-                        chembl_id = mols[0].get("molecule_chembl_id", "")
-                        break
-                except Exception:
-                    continue
-
+        print(f"[ChEMBL] '{compound}' → '{chembl_id or 'NOT FOUND'}'", flush=True)
         if chembl_id:
             result["chembl_id"] = chembl_id
 
             # Potency data
             try:
-                act_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50&format=json&limit=50"
+                act_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50&format=json&limit=100&order_by=pchembl_value"
                 act_data = http_get(act_url)
                 for a in act_data.get("activities", []):
                     val = a.get("standard_value")
