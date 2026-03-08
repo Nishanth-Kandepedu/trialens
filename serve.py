@@ -309,7 +309,7 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/feed":
             try:
                 import datetime
-                yesterday = (datetime.date.today() - datetime.timedelta(days=1)).strftime("%Y-%m-%d")
+                yesterday = (datetime.date.today() - datetime.timedelta(days=7)).strftime("%Y-%m-%d")
                 today = datetime.date.today().strftime("%Y-%m-%d")
                 params = urllib.parse.urlencode({
                     "pageSize": "100", "format": "json",
