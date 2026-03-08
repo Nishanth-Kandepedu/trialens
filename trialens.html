@@ -524,7 +524,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
   <div class="search-box">
     <div class="search-row">
       <div class="search-input-wrap">
-        <input class="search-input" type="text" id="search-input" placeholder="Enter compound name — e.g. Semaglutide, Osimertinib, Venetoclax…">
+        <input class="search-input" type="text" id="search-input" placeholder="Enter compound name — e.g. ARV-471, Osimertinib, Venetoclax…">
       </div>
       <button class="btn-search" id="search-btn" onclick="runSearch()">
         <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.35-4.35"/></svg>
@@ -893,10 +893,10 @@ Phase: ${t.phase}, Status: ${t.status}, Conditions: ${t.conditions}
 Primary Outcome: ${t.primaryOutcome}
 
 Generate a JSON object with EXACTLY these keys:
-- "potency_table": array of up to 6 objects {endpoint, value, unit, assay, source} — ONLY use values from the ChEMBL data above; source must be "ChEMBL ${realData.chembl_id||''}"
-- "dose_response": array of 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes} — inferred from clinical trial context only
-- "admet": array of exactly 7 objects in this order: Oral Bioavailability, Half-life, Protein Binding, CYP3A4 Inhibition, hERG Liability, BBB Penetration, Renal Clearance — each {property, value, rating ("good"|"moderate"|"poor"), notes, source} — PRIORITISE real ChEMBL ADME values (AUC, t1/2, CL, F, PPB etc.) over inference; source must be "ChEMBL ${realData.chembl_id||''}" when using ChEMBL data, "PubChem CID ${realData.pubchem_cid||''}" when using physicochemical data, or "Inferred from physicochemical data" as last resort
-- "summary": 2-sentence SAR narrative using only the provided data, no literature citations
+- "potency_table": array of objects {endpoint, value, unit, assay, chembl_assay_id, source} — ONLY include rows where you have a real single numeric value from the ChEMBL potency data above. DO NOT include ranges (e.g. "160-165"), averages, or inferred values. Each row must map to exactly one data point. chembl_assay_id must be the ChEMBL document ref (e.g. CHEMBL2040800). If no real potency data exists, return empty array [].
+- "dose_response": array of up to 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes} — inferred from clinical trial context only; if insufficient context return []
+- "admet": array of objects — ONLY include properties where you have a real value from ChEMBL ADME data or PubChem above. DO NOT include rows with "Not available" or inferred values unless real physicochemical data supports a specific prediction. Each object: {property, value, unit, rating ("good"|"moderate"|"poor"), notes, source} where source is the exact ChEMBL document ref or "PubChem CID ${realData.pubchem_cid||''}" . If no real ADME data exists for a property, omit it entirely.
+- "summary": 2-sentence SAR narrative using only the provided data, explicitly stating which data sources were found and which were absent
 - "sources": array of only the real sources used e.g. ["ChEMBL CHEMBL1234", "PubChem CID 5284", "ClinicalTrials.gov"]
 
 Return ONLY valid JSON.`,
@@ -992,11 +992,12 @@ function renderPotency(i, sar) {
   const selectivity = findVal('selectivity') || findVal('Selectivity');
 
   // Build up to 4 summary cards from available data
-  const cardDefs = [
-    { label: primary.endpoint||'Primary Target', value: primary.value||'—', unit: primary.unit||'', sub: 'Primary endpoint', pct: 95, color: '#2a5f9e' },
+  const realRows = rows.filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'));
+  const cardDefs = realRows.length === 0 ? [] : [
+    primary.value && primary.value !== 'Not available' ? { label: primary.endpoint||'Primary Target', value: primary.value, unit: primary.unit||'', sub: 'Primary endpoint', pct: 95, color: '#2a5f9e' } : null,
     herg ? { label: 'hERG IC50', value: herg.val, unit: herg.unit, sub: 'Cardiac safety', pct: 30, color: '#2a7a52' } : null,
     selectivity ? { label: 'Selectivity', value: selectivity.val, unit: selectivity.unit, sub: 'vs. off-target', pct: 80, color: '#c8922a' } : null,
-    rows.length > 1 ? { label: 'Endpoints', value: rows.length, unit: '', sub: 'Total measured', pct: (rows.length/6)*100, color: '#6b4fa0' } : null,
+    realRows.length > 1 ? { label: 'Endpoints', value: realRows.length, unit: '', sub: 'Total measured', pct: (realRows.length/6)*100, color: '#6b4fa0' } : null,
   ].filter(Boolean).slice(0,4);
 
   const cards = cardDefs.map(c=>`
@@ -1007,14 +1008,20 @@ function renderPotency(i, sar) {
       <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
     </div>`).join('');
 
-  const tableRows = rows.map(r=>`
-    <tr>
-      <td class="p-endpoint">${r.endpoint||''}</td>
-      <td class="p-value">${r.value||''}</td>
-      <td class="p-unit">${r.unit||''}</td>
-      <td class="p-assay">${r.assay||''}</td>
-      <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
-    </tr>`).join('');
+  const tableRows = rows
+    .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'))
+    .map(r => {
+      const assayLink = r.chembl_assay_id
+        ? `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${r.chembl_assay_id}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--blue);text-decoration:none;">${r.chembl_assay_id} ↗</a>`
+        : srcBadgeHtml(r.source);
+      return `<tr>
+        <td class="p-endpoint">${r.endpoint||''}</td>
+        <td class="p-value">${r.value||''}</td>
+        <td class="p-unit">${r.unit||''}</td>
+        <td class="p-assay">${r.assay||''}</td>
+        <td style="white-space:nowrap;">${assayLink}</td>
+      </tr>`;
+    }).join('');
 
   return `
     <div class="sec-lbl">Potency & Efficacy</div>
@@ -1052,7 +1059,9 @@ function renderDose(i, sar) {
       <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
     </div>`).join('');
 
-  const tableRows = rows.map(r=>`
+  const tableRows = rows
+    .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A')
+    .map(r=>`
     <tr>
       <td class="d-dose">${r.dose||''}</td>
       <td class="d-rate">${r.response_rate||0}%</td>

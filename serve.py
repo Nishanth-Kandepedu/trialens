@@ -206,16 +206,27 @@ def fetch_real_sar_data(compound):
     # ── ChEMBL: Potency + ADME ──────────────────────────────────────────────
     try:
         chembl_id = ""
-        for search_field in ["pref_name__iexact", "molecule_synonyms__synonym__iexact"]:
-            try:
-                search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?" + search_field + "=" + urllib.parse.quote(compound) + "&format=json&limit=1"
-                mol_data = http_get(search_url)
-                mols = mol_data.get("molecules", [])
-                if mols:
-                    chembl_id = mols[0].get("molecule_chembl_id", "")
-                    break
-            except Exception:
-                continue
+        # Build list of name variants to try
+        compound_variants = [compound]
+        if '-' in compound:
+            compound_variants.append(compound.replace('-', ' '))  # ARV-471 → ARV 471
+            compound_variants.append(compound.replace('-', ''))    # ARV-471 → ARV471
+        compound_variants.append(compound.upper())
+        compound_variants.append(compound.lower())
+
+        for variant in compound_variants:
+            if chembl_id:
+                break
+            for search_field in ["pref_name__iexact", "molecule_synonyms__synonym__iexact"]:
+                try:
+                    search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?" + search_field + "=" + urllib.parse.quote(variant) + "&format=json&limit=1"
+                    mol_data = http_get(search_url)
+                    mols = mol_data.get("molecules", [])
+                    if mols:
+                        chembl_id = mols[0].get("molecule_chembl_id", "")
+                        break
+                except Exception:
+                    continue
 
         if chembl_id:
             result["chembl_id"] = chembl_id
