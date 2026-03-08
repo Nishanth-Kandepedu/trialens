@@ -314,7 +314,11 @@ class Handler(BaseHTTPRequestHandler):
                 params = urllib.parse.urlencode({
                     "pageSize": "500", "format": "json",
                     "sort": "LastUpdatePostDate:desc",
-                    "filter.advanced": "AREA[LastUpdatePostDate]RANGE[" + yesterday + "," + today + "]"
+                    "filter.advanced": (
+                        "AREA[LastUpdatePostDate]RANGE[" + yesterday + "," + today + "] AND "
+                        "AREA[StudyType]INTERVENTIONAL AND "
+                        "AREA[InterventionType]DRUG"
+                    )
                 })
                 data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
                 trials = []

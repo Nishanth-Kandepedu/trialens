@@ -1206,7 +1206,7 @@ function renderFeedPage() {
   const q = (document.getElementById('feed-search-input').value||'').trim();
   totalBar.textContent = q
     ? feedFiltered.length + ' of ' + feedData.length + ' trials'
-    : feedData.length + ' trials · last 7 days';
+    : feedData.length + ' drug trials · last 7 days';
 
   if (feedFiltered.length > FEED_PAGE_SIZE) {
     pagination.style.display = 'flex';
@@ -1275,7 +1275,7 @@ async function loadFeed() {
     feedPage_ = 1;
     document.getElementById('feed-search-input').value = '';
     if (!feedData.length) {
-      list.innerHTML = '<div class="feed-empty">No trials updated in the last 7 days.</div>';
+      list.innerHTML = '<div class="feed-empty">No drug trials updated in the last 7 days.</div>';
       totalBar.textContent = '0 trials in last 24h';
       return;
     }
