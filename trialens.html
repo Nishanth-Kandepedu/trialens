@@ -558,28 +558,6 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
       </div>
     </div>
     <div class="metrics-strip" id="metrics-strip"></div>
-    <!-- Compound-level SAR — one profile for the whole compound, shown above all trials -->
-    <div id="compound-sar-panel" style="margin-bottom:24px;">
-      <div style="display:flex;align-items:center;gap:12px;padding:14px 18px;background:var(--paper);border:1px solid var(--paper3);border-radius:12px;">
-        <button class="btn-generate" onclick="generateCompoundSAR()" id="compound-sar-btn">
-          Generate SAR Profile
-        </button>
-        <span class="sar-hint">Compile potency, ADME &amp; tox data from ChEMBL and PubChem for <strong id="sar-compound-label"></strong></span>
-      </div>
-      <div class="sar-progress" id="compound-sar-progress">
-        <div class="loader-wrap">
-          <div class="loader-spinner"></div>
-          <div class="loader-step-label" id="compound-prog-label">Initialising…</div>
-          <div class="loader-bar-track"><div class="loader-bar-fill" id="compound-prog-bar" style="width:0%"></div></div>
-          <div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-            <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
-            <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
-          </div>
-        </div>
-      </div>
-      <div class="sar-results" id="compound-sar-results"></div>
-    </div>
-
     <div id="trials-list"></div>
   </div>
 </div>
@@ -762,14 +740,6 @@ function renderResults(compound, trials) {
     <div class="metric-card mc-violet"><div class="mc-label">Data Sources</div><div class="mc-value">${sources.length}</div><div class="mc-sub">${sources.join(', ')}</div></div>`;
 
   // Trial cards
-  // Reset compound SAR panel for new search
-  document.getElementById('compound-sar-btn').disabled = false;
-  document.getElementById('sar-compound-label').textContent = compound;
-  document.getElementById('compound-sar-results').innerHTML = '';
-  document.getElementById('compound-sar-results').classList.remove('active');
-  document.getElementById('compound-sar-progress').classList.remove('active');
-  compoundSAR = null;
-
   const list = document.getElementById('trials-list');
   list.innerHTML = trials.map((t,i) => renderTrialCard(t, i)).join('');
 }
@@ -816,23 +786,25 @@ function renderTrialCard(t, i) {
       </div>
       ${t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : ''}
       ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
-
-      <div class="dose-section" id="dose-section-${i}" style="border-top:1px solid var(--paper3);padding:16px 20px 0;">
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:12px;">
-          <button class="btn-ghost" style="font-size:11px;padding:5px 12px;" onclick="generateDoseResponse(${i})" id="dose-btn-${i}">
-            <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" style="margin-right:4px;"><polyline points="22,12 18,12 15,21 9,3 6,12 2,12"/></svg>
-            Generate Dose-Response
+      <div class="sar-section" id="sar-section-${i}">
+        <div class="sar-trigger">
+          <button class="btn-generate" onclick="generateSAR(${i})" id="gen-btn-${i}">
+            Generate SAR Profile
           </button>
-          <span style="font-size:11px;color:var(--ink3);font-family:'IBM Plex Mono',monospace;">Inferred from this trial's phase, outcomes &amp; enrollment</span>
+          <span class="sar-hint">Potency, ADME &amp; dose-response for this trial</span>
         </div>
-        <div class="sar-progress" id="dose-progress-${i}" style="padding:0;">
-          <div class="loader-wrap" style="padding:12px 0;">
+        <div class="sar-progress" id="sar-progress-${i}">
+          <div class="loader-wrap">
             <div class="loader-spinner"></div>
-            <div class="loader-step-label" id="dose-prog-label-${i}">Analysing trial context…</div>
-            <div class="loader-bar-track"><div class="loader-bar-fill" id="dose-prog-bar-${i}" style="width:0%"></div></div>
+            <div class="loader-step-label" id="prog-label-${i}">Initialising…</div>
+            <div class="loader-bar-track"><div class="loader-bar-fill" id="prog-bar-${i}" style="width:0%"></div></div>
+            <div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:8px;">
+              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
+              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
+            </div>
           </div>
         </div>
-        <div id="dose-results-${i}"></div>
+        <div class="sar-results" id="sar-results-${i}"></div>
       </div>
     </div>
   </div>`;
@@ -919,17 +891,15 @@ Return ONLY valid JSON. No markdown.`,
 }
 
 // ── SAR GENERATION ─────────────────────────────────────────────
-async function generateCompoundSAR() {
+async function generateSAR(i) {
   if (!apiKey) { showToast('Enter your API key first.'); return; }
-  const btn = document.getElementById('compound-sar-btn');
-  const progressEl = document.getElementById('compound-sar-progress');
-  const labelEl = document.getElementById('compound-prog-label');
-  const barEl = document.getElementById('compound-prog-bar');
+  const t = currentTrials[i];
+  const btn = document.getElementById('gen-btn-'+i);
+  const progressEl = document.getElementById('sar-progress-'+i);
+  const labelEl = document.getElementById('prog-label-'+i);
+  const barEl = document.getElementById('prog-bar-'+i);
   btn.disabled = true;
   progressEl.classList.add('active');
-  // Use highest-phase trial for clinical context
-  const phaseRank = p => p&&p.includes('3')?3:p&&p.includes('2')?2:p&&p.includes('1')?1:0;
-  const t = [...currentTrials].sort((a,b)=>phaseRank(b.phase)-phaseRank(a.phase))[0] || currentTrials[0];
 
   const setProgress = (pct, label) => {
     if (labelEl) labelEl.textContent = label;
@@ -1029,6 +999,12 @@ Return a JSON object with these exact keys:
 - Include at most 8 rows — pick the most pharmacologically relevant endpoints
 - If POTENCY DATA is NONE → return []
 
+"dose_response": Array of 3-4 objects for this specific trial. Each: {dose, response_rate, toxicity_grade, notes}
+- dose: realistic dose string for this compound/phase/condition (e.g. "400 mg QD")
+- response_rate: integer 0-100 estimated from trial outcome language and phase
+- toxicity_grade: integer 1-3 (1=mild, 2=moderate, 3=severe)
+- notes: one sentence citing specific trial context (phase, condition, primary outcome)
+
 "admet": Array from ADME/TOX DATA only. Each object: {property, value, unit, rating, notes, source}
 - property: standardised name (Half-life, Clearance, AUC, Protein Binding, hERG IC50, etc.)
 - value: EXACT numeric value from the data
@@ -1052,11 +1028,11 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     setProgress(90, 'Rendering results...');
     sar._realData = realData;
     sar._sources = sar.sources || (realData.sources || []);
-    compoundSAR = sar;
+    sarCache[i] = sar;
     if (barEl) barEl.style.width = '100%';
     await sleep(200);
     progressEl.classList.remove('active');
-    renderCompoundSARResults(sar);
+    renderSARResults(i, sar);
   } catch(e) {
     progressEl.classList.remove('active');
     btn.disabled = false;
@@ -1064,8 +1040,9 @@ Return ONLY valid JSON. No markdown, no explanation.`,
   }
 }
 
-function renderCompoundSARResults(sar) {
-  const el = document.getElementById('compound-sar-results');
+
+function renderSARResults(i, sar) {
+  const el = document.getElementById('sar-results-'+i);
   const rd = sar._realData || {};
   el.innerHTML = `
     <div class="sar-disclaimer">
@@ -1075,26 +1052,17 @@ function renderCompoundSARResults(sar) {
       · Verify against primary literature
     </div>
     <div class="sar-tabs">
-      <div class="sar-tab active" onclick="switchCompoundTab('potency', this)">Potency & Efficacy</div>
-
-      <div class="sar-tab" onclick="switchCompoundTab('admet', this)">ADMET</div>
-      <div class="sar-tab" onclick="switchCompoundTab('narrative', this)">SAR Narrative</div>
+      <div class="sar-tab active" onclick="switchTab(${i},'potency',this)">Potency & Efficacy</div>
+      <div class="sar-tab" onclick="switchTab(${i},'dose',this)">Dose-Response</div>
+      <div class="sar-tab" onclick="switchTab(${i},'admet',this)">ADMET</div>
+      <div class="sar-tab" onclick="switchTab(${i},'narrative',this)">SAR Narrative</div>
     </div>
-    <div class="sar-tab-content active" id="ctab-potency">${renderPotency('c', sar)}</div>
-
-    <div class="sar-tab-content" id="ctab-admet" style="display:none;">${renderAdmet('c', sar)}</div>
-    <div class="sar-tab-content" id="ctab-narrative" style="display:none;">${renderNarrative('c', sar)}</div>`;
+    <div class="sar-tab-content active" id="tab-${i}-potency">${renderPotency(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-dose" style="display:none;">${renderDose(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-admet" style="display:none;">${renderAdmet(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-narrative" style="display:none;">${renderNarrative(i, sar)}</div>`;
   el.classList.add('active');
-  setTimeout(() => { initPotencyChart('c', sar); initRadarChart('c', sar); }, 50);
-}
-
-function switchCompoundTab(tab, el) {
-  const container = document.getElementById('compound-sar-results');
-  container.querySelectorAll('.sar-tab').forEach(t => t.classList.remove('active'));
-  container.querySelectorAll('.sar-tab-content').forEach(t => { t.classList.remove('active'); t.style.display = 'none'; });
-  el.classList.add('active');
-  const content = document.getElementById('ctab-'+tab);
-  if (content) { content.classList.add('active'); content.style.display = 'block'; }
+  setTimeout(() => { initPotencyChart(i, sar); initDoseChart(i, sar); initRadarChart(i, sar); }, 50);
 }
 
 function switchTab(i, tab, el) {
@@ -1326,30 +1294,30 @@ function renderAdmet(i, sar) {
   };
   const admetRowsArr = rows
     .filter(r => hasVerifiedSource(r.source))
-    .map(r=>`
-    <div class="admet-row">
-      <div class="admet-prop">${r.property||''}</div>
-      <div class="admet-val-cell">${r.value||''} ${r.unit||''} ${srcBadgeHtml(r.source)}</div>
-      <div class="admet-rating-cell"><span class="${rc(r.rating)}">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></div>
-      <div class="admet-notes-cell">${r.notes||''}</div>
-    </div>`);
+    .map(r => `<tr>
+      <td style="font-weight:600;color:var(--ink2);">${r.property||''}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
+      <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
+      <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
+      <td style="color:var(--ink3);font-size:12px;">${r.notes||''}</td>
+    </tr>`);
   const admetPaged = paginatedTable(admetRowsArr, 'admet-'+i);
-  const admetRows = admetPaged.paginated ? admetPaged.body : admetPaged.body;
   const admetPageCtrl = admetPaged.controls;
-
-  const hdr = `<div style="display:grid;grid-template-columns:180px 1fr auto 280px;gap:16px;padding:8px 16px;background:var(--paper2);border-radius:6px 6px 0 0;border:1px solid var(--paper3);border-bottom:none;">
-    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Property</span>
-    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Value</span>
-    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Rating</span>
-    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Notes</span>
-  </div>`;
 
   const noAdmet = !verifiedRows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL or PubChem for this compound.</div>' : '';
 
   return `
     <div class="sec-lbl">ADMET Properties</div>
     ${noAdmet}
-    ${verifiedRows.length ? `<div class="admet-score-grid">${scorecards}</div>${hdr}<div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">${admetRows}${admetPageCtrl}</div>` : ''}`;
+    ${verifiedRows.length ? `
+    <div class="admet-score-grid">${scorecards}</div>
+    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
+      <table class="potency-table">
+        <thead><tr><th>Property</th><th>Value</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
+        ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
+      </table>
+      ${admetPageCtrl}
+    </div>` : ''}`;
 }
 
 function renderNarrative(i, sar) {
@@ -1687,7 +1655,10 @@ function loadReport(i) {
   document.getElementById('search-input').value = r.compound;
   showView('search');
   renderResults(r.compound, r.trials);
-  if (compoundSAR) renderCompoundSARResults(compoundSAR);
+  Object.keys(sarCache).forEach(idx => {
+    const el = document.getElementById('sar-results-'+idx);
+    if (el) renderSARResults(parseInt(idx), sarCache[idx]);
+  });
 }
 
 function deleteReport(i) {
@@ -1698,7 +1669,7 @@ function deleteReport(i) {
 }
 
 function downloadNarrative(i) {
-  const sar = compoundSAR; if (!sar) return;
+  const sar = sarCache[i]; if (!sar) return;
   const blob = new Blob([sar.summary||''], {type:'text/plain'});
   const a = document.createElement('a'); a.href = URL.createObjectURL(blob);
   a.download = `SAR_${currentCompound}_trial${i}.txt`; a.click();
