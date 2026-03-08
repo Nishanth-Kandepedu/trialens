@@ -130,9 +130,6 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .feed-page-btn:hover:not(:disabled) { border-color: var(--ink); color: var(--ink); background: var(--paper2); }
 .feed-page-btn:disabled { opacity: 0.35; cursor: not-allowed; }
 .feed-page-info { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink4); }
-.feed-page-jump { width: 32px; font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink); background: var(--paper2); border: 1px solid var(--paper3); border-radius: 3px; padding: 2px 4px; text-align: center; outline: none; -moz-appearance: textfield; }
-.feed-page-jump::-webkit-inner-spin-button, .feed-page-jump::-webkit-outer-spin-button { -webkit-appearance: none; }
-.feed-page-jump:focus { border-color: var(--ink3); }
 .feed-total-bar { font-family: 'IBM Plex Mono', monospace; font-size: 8.5px; color: var(--ink4); padding: 4px 12px 3px; border-bottom: 1px solid var(--paper2); flex-shrink: 0; }
 .feed-search-wrap { position: relative; padding: 8px 10px; border-bottom: 1px solid var(--paper3); flex-shrink: 0; }
 .feed-search-icon { position: absolute; left: 18px; top: 50%; transform: translateY(-50%); color: var(--ink4); pointer-events: none; }
@@ -402,20 +399,6 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 /* Toast */
 .toast { position: fixed; bottom: 24px; right: 24px; background: var(--ink); color: var(--paper); padding: 12px 20px; border-radius: 10px; font-size: 13px; font-weight: 500; box-shadow: var(--shadow-lg); z-index: 999; transform: translateY(80px); opacity: 0; transition: all .3s; }
 .toast.show { transform: translateY(0); opacity: 1; }
-
-.feed-search-wrap { position: relative; }
-.feed-search-results { position: absolute; top: 100%; left: 0; right: 0; background: var(--paper); border: 1px solid var(--paper3); border-top: none; border-radius: 0 0 6px 6px; z-index: 300; max-height: 340px; overflow-y: auto; box-shadow: 0 4px 16px rgba(14,13,11,0.12); }
-.feed-search-result-item { padding: 8px 12px; border-bottom: 1px solid var(--paper2); cursor: pointer; transition: background .1s; }
-.feed-search-result-item:last-child { border-bottom: none; }
-.feed-search-result-item:hover { background: var(--paper2); }
-.feed-sr-nct { font-family: 'IBM Plex Mono', monospace; font-size: 9px; color: var(--blue); font-weight: 600; }
-.feed-sr-title { font-size: 11px; color: var(--ink); line-height: 1.4; margin: 2px 0; }
-.feed-sr-meta { font-size: 10px; color: var(--ink3); }
-.feed-sr-source { font-family: 'IBM Plex Mono', monospace; font-size: 8px; color: var(--gold); margin-top: 2px; }
-.feed-search-loading { padding: 12px; text-align: center; font-size: 11px; color: var(--ink3); }
-.feed-search-none { padding: 12px; text-align: center; font-size: 11px; color: var(--ink3); }
-[data-theme="dark"] .feed-search-results { background: var(--paper2); border-color: var(--paper3); }
-[data-theme="dark"] .feed-search-result-item:hover { background: var(--paper3); }
 </style>
 <!-- Google Analytics -->
 <script async src="https://www.googletagmanager.com/gtag/js?id=G-RB2E1H2P68"></script>
@@ -477,20 +460,16 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
   <div class="feed-body">
     <div class="feed-search-wrap">
       <svg class="feed-search-icon" width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="8"/><line x1="21" y1="21" x2="16.65" y2="16.65"/></svg>
-      <input class="feed-search-input" id="feed-search-input" type="text" placeholder="Search NCTs, condition, sponsor…" oninput="handleFeedSearch()" autocomplete="off">
-    <div class="feed-search-results" id="feed-search-results" style="display:none"></div>
+      <input class="feed-search-input" id="feed-search-input" type="text" placeholder="Search NCTs, condition, sponsor…" oninput="filterFeed()">
     </div>
     <div class="feed-total-bar" id="feed-total-bar"></div>
     <div class="feed-list" id="feed-list">
       <div class="feed-loading"><div class="feed-spinner"></div></div>
     </div>
     <div class="feed-pagination" id="feed-pagination" style="display:none">
-      <button class="feed-page-btn" id="feed-first-btn" onclick="feedJump(1)" title="First page">&#171;</button>
       <button class="feed-page-btn" id="feed-prev-btn" onclick="feedPage(-1)" disabled>&#8592;</button>
-      <input class="feed-page-jump" id="feed-page-jump" type="number" min="1" title="Jump to page" onchange="feedJumpInput(this)"/>
       <span class="feed-page-info" id="feed-page-info"></span>
       <button class="feed-page-btn" id="feed-next-btn" onclick="feedPage(1)">&#8594;</button>
-      <button class="feed-page-btn" id="feed-last-btn" onclick="feedJumpLast()" title="Last page">&#187;</button>
     </div>
   </div>
 </aside>
@@ -1221,86 +1200,17 @@ function renderFeedPage() {
   const q = (document.getElementById('feed-search-input').value||'').trim();
   totalBar.textContent = q
     ? feedFiltered.length + ' of ' + feedData.length + ' trials'
-    : feedData.length + ' drug trials · last 48h';
+    : feedData.length + ' trials · last 24h';
 
   if (feedFiltered.length > FEED_PAGE_SIZE) {
     pagination.style.display = 'flex';
-    pageInfo.textContent = feedPage_ + '/' + totalPages;
+    pageInfo.textContent = feedPage_ + ' / ' + totalPages;
     prevBtn.disabled = feedPage_ === 1;
     nextBtn.disabled = feedPage_ === totalPages;
-    document.getElementById('feed-first-btn').disabled = feedPage_ === 1;
-    document.getElementById('feed-last-btn').disabled = feedPage_ === totalPages;
   } else {
     pagination.style.display = 'none';
   }
 }
-
-
-let feedSearchTimer = null;
-let feedSearchActive = false;
-
-function handleFeedSearch() {
-  const q = document.getElementById('feed-search-input').value.trim();
-  clearTimeout(feedSearchTimer);
-  
-  // Close results if empty — fall back to local filter
-  if (!q) {
-    closeFeedSearch();
-    filterFeed();
-    return;
-  }
-
-  // Local filter for quick feedback
-  filterFeed();
-
-  // Debounce live search — fire after 400ms pause
-  feedSearchTimer = setTimeout(() => runLiveNctSearch(q), 400);
-}
-
-async function runLiveNctSearch(q) {
-  const panel = document.getElementById('feed-search-results');
-  panel.style.display = 'block';
-  panel.innerHTML = '<div class="feed-search-loading">Searching ClinicalTrials.gov…</div>';
-  try {
-    const res = await fetch('/api/nct-search', {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ query: q })
-    });
-    const data = await res.json();
-    if (!data.trials || !data.trials.length) {
-      panel.innerHTML = '<div class="feed-search-none">No drug trials found for "' + q + '"</div>';
-      return;
-    }
-    panel.innerHTML = data.trials.map(t => `
-      <div class="feed-search-result-item" onclick="openNctResult('${t.url}')">
-        <div class="feed-sr-nct">${t.id} <span style="font-weight:400;color:var(--ink3)">${t.phase || ''}</span></div>
-        <div class="feed-sr-title">${t.title}</div>
-        <div class="feed-sr-meta">${t.conditions || ''} · ${t.sponsor || ''}</div>
-        <div class="feed-sr-source">↗ ClinicalTrials.gov · ${t.status}</div>
-      </div>
-    `).join('');
-  } catch(e) {
-    panel.innerHTML = '<div class="feed-search-none">Search failed. Try again.</div>';
-  }
-}
-
-function openNctResult(url) {
-  window.open(url, '_blank');
-  closeFeedSearch();
-}
-
-function closeFeedSearch() {
-  const panel = document.getElementById('feed-search-results');
-  if (panel) panel.style.display = 'none';
-  feedSearchActive = false;
-}
-
-// Close on outside click
-document.addEventListener('click', function(e) {
-  const wrap = document.querySelector('.feed-search-wrap');
-  if (wrap && !wrap.contains(e.target)) closeFeedSearch();
-});
 
 function filterFeed() {
   const q = (document.getElementById('feed-search-input').value||'').toLowerCase().trim();
@@ -1312,25 +1222,6 @@ function filterFeed() {
   ) : feedData.slice();
   feedPage_ = 1;
   renderFeedPage();
-}
-
-function feedJump(page) {
-  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
-  feedPage_ = Math.max(1, Math.min(totalPages, page));
-  renderFeedPage();
-  document.getElementById('feed-list').scrollTop = 0;
-}
-
-function feedJumpLast() {
-  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
-  feedJump(totalPages);
-}
-
-function feedJumpInput(el) {
-  const totalPages = Math.max(1, Math.ceil(feedFiltered.length / FEED_PAGE_SIZE));
-  const val = parseInt(el.value);
-  if (!isNaN(val)) feedJump(val);
-  el.value = '';
 }
 
 function feedPage(dir) {
@@ -1357,7 +1248,7 @@ async function loadFeed() {
     feedPage_ = 1;
     document.getElementById('feed-search-input').value = '';
     if (!feedData.length) {
-      list.innerHTML = '<div class="feed-empty">No drug trials updated in the last 48 hours.</div>';
+      list.innerHTML = '<div class="feed-empty">No trials updated in the last 24 hours.</div>';
       totalBar.textContent = '0 trials in last 24h';
       return;
     }
