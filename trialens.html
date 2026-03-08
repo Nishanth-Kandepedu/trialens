@@ -1551,6 +1551,7 @@ let feedSearchActive = false;
 function handleFeedSearch() {
   const q = document.getElementById('feed-search-input').value.trim();
   clearTimeout(feedSearchTimer);
+  const panel = document.getElementById('feed-search-results');
 
   if (!q) {
     closeFeedSearch();
@@ -1558,10 +1559,7 @@ function handleFeedSearch() {
     return;
   }
 
-  // Step 1: local filter for instant feedback
-  filterFeed();
-
-  // Step 2: check if local filter found anything — use same logic as filterFeed()
+  // Check local matches WITHOUT touching feedFiltered or the feed list
   const ql = q.toLowerCase();
   const localMatches = feedData.filter(t =>
     (t.id||'').toLowerCase().includes(ql) ||
@@ -1570,23 +1568,27 @@ function handleFeedSearch() {
     (t.sponsor||'').toLowerCase().includes(ql)
   );
 
-  const panel = document.getElementById('feed-search-results');
-  panel.style.display = 'block';
-
   if (localMatches.length > 0) {
-    // Found locally — no need to hit the API, just close dropdown
+    // Found in local feed — filter it and hide dropdown
+    filterFeed();
     panel.style.display = 'none';
     return;
   }
 
-  // Step 3: nothing in local list — show "not found" + offer to search ClinicalTrials.gov
+  // Not in local feed — keep feed list intact, show dropdown CTA
+  // Reset feed to show all (don't filter to zero)
+  feedFiltered = feedData.slice();
+  feedPage_ = 1;
+  renderFeedPage();
+
+  panel.style.display = 'block';
   panel.innerHTML = `
     <div style="padding:12px 14px;">
       <div style="font-size:12px;color:var(--ink2);font-weight:600;margin-bottom:6px;">
-        No matches in current feed for "<em>${q}</em>"
+        "<em>${q}</em>" not found in recent 48h feed
       </div>
       <div style="font-size:11px;color:var(--ink3);margin-bottom:10px;">
-        This term isn't in the last 48h drug trials list.
+        Search the full ClinicalTrials.gov database instead?
       </div>
       <button onclick="runLiveNctSearch('${q.replace(/'/g, "\'")}')" style="width:100%;padding:7px 12px;background:var(--blue);color:#fff;border:none;border-radius:6px;font-size:11px;font-weight:600;cursor:pointer;font-family:inherit;">
         Search ClinicalTrials.gov for "${q}"
