@@ -206,20 +206,33 @@ def fetch_real_sar_data(compound):
     # ── ChEMBL: Potency + ADME ──────────────────────────────────────────────
     try:
         chembl_id = ""
-        # Build list of name variants to try
-        compound_variants = [compound]
-        if '-' in compound:
-            compound_variants.append(compound.replace('-', ' '))  # ARV-471 → ARV 471
-            compound_variants.append(compound.replace('-', ''))    # ARV-471 → ARV471
-        compound_variants.append(compound.upper())
-        compound_variants.append(compound.lower())
 
-        for variant in compound_variants:
-            if chembl_id:
-                break
-            for search_field in ["pref_name__iexact", "molecule_synonyms__synonym__iexact"]:
+        # Strategy 1: ChEMBL full-text search — searches ALL synonyms, trade names, research codes
+        try:
+            search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=" + urllib.parse.quote(compound) + "&format=json&limit=5"
+            mol_data = http_get(search_url)
+            mols = mol_data.get("molecules", [])
+            if mols:
+                chembl_id = mols[0].get("molecule_chembl_id", "")
+        except Exception:
+            pass
+
+        # Strategy 2: pref_name exact match (fast fallback)
+        if not chembl_id:
+            try:
+                search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=" + urllib.parse.quote(compound) + "&format=json&limit=1"
+                mol_data = http_get(search_url)
+                mols = mol_data.get("molecules", [])
+                if mols:
+                    chembl_id = mols[0].get("molecule_chembl_id", "")
+            except Exception:
+                pass
+
+        # Strategy 3: try without hyphens (ARV-471 → ARV471, MMV-390048 → MMV390048)
+        if not chembl_id and '-' in compound:
+            for variant in [compound.replace('-', ''), compound.replace('-', ' ')]:
                 try:
-                    search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?" + search_field + "=" + urllib.parse.quote(variant) + "&format=json&limit=1"
+                    search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule/search?q=" + urllib.parse.quote(variant) + "&format=json&limit=3"
                     mol_data = http_get(search_url)
                     mols = mol_data.get("molecules", [])
                     if mols:

@@ -917,11 +917,12 @@ Return a JSON object with these exact keys:
 
 "potency_table": Array of objects from POTENCY DATA only. Each object: {endpoint, value, unit, assay, ref, source}
 - endpoint: the measurement type (IC50, Ki, etc.)
-- value: EXACT single numeric value only — NEVER a range like "100-200"
-- unit: nM, uM, % etc.
-- assay: short assay description
-- ref: the ChEMBL document ID (e.g. CHEMBL2040800)
+- value: EXACT single numeric value only — NEVER a range like "100-200", pick the most representative single value
+- unit: nM, uM, % etc. exactly as given
+- assay: short assay description from the data
+- ref: the exact ChEMBL document ID from the "ref:" field in the data (e.g. CHEMBL2040800)
 - source: "ChEMBL ${realData.chembl_id||''}"
+- Include at most 8 rows — pick the most pharmacologically relevant endpoints
 - If POTENCY DATA is NONE → return []
 
 "dose_response": Array of dose-response points inferred ONLY from clinical trial context (enrollment, phase, outcomes, conditions). Each object: {dose, response_rate, toxicity_grade, notes}
@@ -1002,29 +1003,42 @@ function switchTab(i, tab, el) {
 
 function srcBadgeHtml(src) {
   if (!src) return '';
-  // Only allow known real sources — reject anything that looks like a fabricated journal citation
-  const isFake = /j med|pmid|nature|science|cancer|cell|lancet|nejm|chem|biol|pharmacol|[0-9]{4},\s*[0-9]+/i.test(src) 
-    && !src.includes('ChEMBL') && !src.includes('PubChem') && !src.includes('ClinicalTrials') && !src.includes('Inferred');
-  if (isFake) return '<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:#c0392b12;color:#c0392b;border:1px solid #c0392b22;font-weight:600;">Unverified</span>';
+  const s = src.trim();
 
-  const sc = src.includes('ChEMBL') ? '#2a5f9e' : src.includes('PubChem') ? '#2a7a52' : src.includes('ClinicalTrials') ? '#6b4fa0' : '#7a756e';
+  // Whitelist: only these patterns are accepted as real sources
+  const isChEMBL = /CHEMBL\d+/i.test(s);
+  const isPubChem = /PubChem|CID\s*\d+/i.test(s);
+  const isClinical = /ClinicalTrials|NCT\d+/i.test(s);
+  const isKnown = isChEMBL || isPubChem || isClinical;
 
-  // Make ChEMBL document IDs clickable
-  const chemblDocMatch = src.match(/CHEMBL(\d+)/);
+  if (!isKnown) {
+    // Anything else — grey "unverified" with no link
+    return '<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:#f0ede6;color:#b5b0a8;border:1px solid #ddd9cf;font-weight:600;">unverified</span>';
+  }
+
+  const sc = isChEMBL ? '#2a5f9e' : isPubChem ? '#2a7a52' : '#6b4fa0';
+
+  // ChEMBL compound card link
+  const chemblCompound = s.match(/^CHEMBL(\d+)$/i);
+  if (chemblCompound) {
+    return `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${s.toUpperCase()}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${s.toUpperCase()} ↗</a>`;
+  }
+
+  // ChEMBL document ref (e.g. "CHEMBL2040800" inside a longer string)
+  const chemblDocMatch = s.match(/CHEMBL(\d{6,})/i);
   if (chemblDocMatch) {
-    const url = src.includes('CHEMBL') && !src.includes('CID') 
-      ? 'https://www.ebi.ac.uk/chembl/document_report_card/' + src.replace(/.*?(CHEMBL\d+).*/,'$1')
-      : 'https://www.ebi.ac.uk/chembl/compound_report_card/' + src.replace(/.*?(CHEMBL\d+).*/,'$1');
-    return `<a href="${url}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
+    const id = 'CHEMBL' + chemblDocMatch[1];
+    return `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${id}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${id} ↗</a>`;
   }
 
-  // Make PubChem CIDs clickable
-  const pubchemMatch = src.match(/CID\s*(\d+)/);
+  // PubChem CID
+  const pubchemMatch = s.match(/CID\s*(\d+)/i);
   if (pubchemMatch) {
-    return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
+    return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">PubChem CID ${pubchemMatch[1]} ↗</a>`;
   }
 
-  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${src}</span>`;
+  // Generic known source label
+  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${s}</span>`;
 }
 
 function renderPotency(i, sar) {
@@ -1143,7 +1157,11 @@ function renderAdmet(i, sar) {
   const rc = r => r==='good'?'r-good':r==='poor'?'r-poor':'r-mod';
 
   // Top score cards — 4 per row (show first 8, covers all 7 properties)
-  const scorecards = rows.map(r => {
+  const verifiedRows = rows.filter(r => {
+    const src = r.source || '';
+    return /CHEMBL\d+/i.test(src) || /PubChem|CID\s*\d+/i.test(src);
+  });
+  const scorecards = verifiedRows.map(r => {
     const pct = ((rmap[r.rating]||2)/3)*100;
     const col = barColor(r.rating);
     return `<div class="admet-score-card">
@@ -1156,11 +1174,18 @@ function renderAdmet(i, sar) {
     </div>`;
   }).join('');
 
-  // Detail rows
-  const admetRows = rows.map(r=>`
+  // Also filter top-level rows var for downstream use
+  // Detail rows — only show if source is a real verified ChEMBL/PubChem ref
+  const hasVerifiedSource = (src) => {
+    if (!src) return false;
+    return /CHEMBL\d+/i.test(src) || /PubChem|CID\s*\d+/i.test(src);
+  };
+  const admetRows = rows
+    .filter(r => hasVerifiedSource(r.source))
+    .map(r=>`
     <div class="admet-row">
       <div class="admet-prop">${r.property||''}</div>
-      <div class="admet-val-cell">${r.value||''} ${srcBadgeHtml(r.source)}</div>
+      <div class="admet-val-cell">${r.value||''} ${r.unit||''} ${srcBadgeHtml(r.source)}</div>
       <div class="admet-rating-cell"><span class="${rc(r.rating)}">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></div>
       <div class="admet-notes-cell">${r.notes||''}</div>
     </div>`).join('');
@@ -1172,7 +1197,7 @@ function renderAdmet(i, sar) {
     <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Notes</span>
   </div>`;
 
-  const noAdmet = !rows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL or PubChem for this compound.</div>' : '';
+  const noAdmet = !verifiedRows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL or PubChem for this compound.</div>' : '';
 
   const physSection = pc ? `
     <div class="sec-lbl" style="margin-top:24px;">Physicochemical Properties <span style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--ink3);font-weight:400;">PubChem</span></div>
@@ -1187,7 +1212,7 @@ function renderAdmet(i, sar) {
   return `
     <div class="sec-lbl">ADMET Properties</div>
     ${noAdmet}
-    ${rows.length ? `<div class="admet-score-grid">${scorecards}</div>${hdr}<div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">${admetRows}</div>` : ''}
+    ${verifiedRows.length ? `<div class="admet-score-grid">${scorecards}</div>${hdr}<div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">${admetRows}</div>` : ''}
     ${physSection}`;
 }
 
