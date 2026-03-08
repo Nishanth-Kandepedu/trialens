@@ -119,7 +119,7 @@ def http_get(url, timeout=20, retries=2):
 
 def fetch_trials(compound):
     params = urllib.parse.urlencode({
-        "query.intr": compound, "pageSize": "6",
+        "query.intr": compound, "pageSize": "100",
         "format": "json", "sort": "LastUpdatePostDate:desc"
     })
     data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)

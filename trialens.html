@@ -559,6 +559,14 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
     </div>
     <div class="metrics-strip" id="metrics-strip"></div>
     <div id="trials-list"></div>
+    <div id="trials-pagination" style="display:none;align-items:center;justify-content:space-between;padding:14px 4px;margin-top:4px;">
+      <span id="trials-page-info" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink3);"></span>
+      <div style="display:flex;gap:6px;align-items:center;">
+        <button onclick="trialsChangePage(-1)" id="trials-prev" style="background:none;border:1px solid var(--paper3);border-radius:6px;padding:5px 14px;cursor:pointer;font-size:12px;color:var(--ink2);">← Prev</button>
+        <span id="trials-page-num" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink2);white-space:nowrap;"></span>
+        <button onclick="trialsChangePage(1)" id="trials-next" style="background:none;border:1px solid var(--paper3);border-radius:6px;padding:5px 14px;cursor:pointer;font-size:12px;color:var(--ink2);">Next →</button>
+      </div>
+    </div>
   </div>
 </div>
 
@@ -739,9 +747,46 @@ function renderResults(compound, trials) {
     <div class="metric-card mc-gold"><div class="mc-label">Phase Coverage</div><div class="mc-value" style="font-size:16px;letter-spacing:-.3px;">${phases.join(' · ')||'—'}</div><div class="mc-sub">&nbsp;</div></div>
     <div class="metric-card mc-violet"><div class="mc-label">Data Sources</div><div class="mc-value">${sources.length}</div><div class="mc-sub">${sources.join(', ')}</div></div>`;
 
-  // Trial cards
+  // Trial cards — paginated 10 per page
+  allTrials = trials;
+  trialsCurrentPage = 0;
+  renderTrialsPage();
+}
+
+const TRIALS_PER_PAGE = 10;
+let allTrials = [];
+let trialsCurrentPage = 0;
+
+function renderTrialsPage() {
+  const total = allTrials.length;
+  const pages = Math.ceil(total / TRIALS_PER_PAGE);
+  const start = trialsCurrentPage * TRIALS_PER_PAGE;
+  const end   = Math.min(start + TRIALS_PER_PAGE, total);
+  const pageTrials = allTrials.slice(start, end);
+
   const list = document.getElementById('trials-list');
-  list.innerHTML = trials.map((t,i) => renderTrialCard(t, i)).join('');
+  // i offset = start so each card gets a stable global index (SAR cache stays valid)
+  list.innerHTML = pageTrials.map((t, idx) => renderTrialCard(t, start + idx)).join('');
+
+  // Pagination bar
+  const bar = document.getElementById('trials-pagination');
+  if (total <= TRIALS_PER_PAGE) {
+    bar.style.display = 'none';
+  } else {
+    bar.style.display = 'flex';
+    document.getElementById('trials-page-info').textContent = `Showing ${start+1}–${end} of ${total} trials`;
+    document.getElementById('trials-page-num').textContent  = `Page ${trialsCurrentPage+1} of ${pages}`;
+    document.getElementById('trials-prev').disabled = trialsCurrentPage === 0;
+    document.getElementById('trials-next').disabled = trialsCurrentPage >= pages - 1;
+  }
+  // Scroll to top of list on page change
+  list.scrollIntoView({ behavior: 'smooth', block: 'start' });
+}
+
+function trialsChangePage(dir) {
+  const pages = Math.ceil(allTrials.length / TRIALS_PER_PAGE);
+  trialsCurrentPage = Math.max(0, Math.min(pages - 1, trialsCurrentPage + dir));
+  renderTrialsPage();
 }
 
 function statusBadge(s) {
