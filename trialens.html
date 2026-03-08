@@ -871,8 +871,11 @@ CRITICAL RULES — YOU MUST FOLLOW THESE EXACTLY:
 3. If a value is not in the provided data, say "Not available" — do NOT fabricate a number.
 4. Do NOT cite any journal, paper, PMID, or author under any circumstance.
 
-REAL BIOACTIVITY DATA (ChEMBL ${realData.chembl_id || 'not found'}):
+REAL POTENCY DATA (ChEMBL ${realData.chembl_id || 'not found'}):
 ${bioLines}
+
+REAL ADME DATA (ChEMBL ${realData.chembl_id || 'not found'}):
+${admeLines}
 
 REAL PHYSICOCHEMICAL DATA (PubChem):
 ${pcLines}
@@ -884,7 +887,7 @@ Primary Outcome: ${t.primaryOutcome}
 Generate a JSON object with EXACTLY these keys:
 - "potency_table": array of up to 6 objects {endpoint, value, unit, assay, source} — ONLY use values from the ChEMBL data above; source must be "ChEMBL ${realData.chembl_id||''}"
 - "dose_response": array of 4 objects {dose, response_rate (integer 0-100), toxicity_grade (integer 1-3), notes} — inferred from clinical trial context only
-- "admet": array of exactly 7 objects in this order: Oral Bioavailability, Half-life, Protein Binding, CYP3A4 Inhibition, hERG Liability, BBB Penetration, Renal Clearance — each {property, value, rating ("good"|"moderate"|"poor"), notes, source} — source must be "PubChem CID ${realData.pubchem_cid||''}" or "Inferred from physicochemical data"
+- "admet": array of exactly 7 objects in this order: Oral Bioavailability, Half-life, Protein Binding, CYP3A4 Inhibition, hERG Liability, BBB Penetration, Renal Clearance — each {property, value, rating ("good"|"moderate"|"poor"), notes, source} — PRIORITISE real ChEMBL ADME values (AUC, t1/2, CL, F, PPB etc.) over inference; source must be "ChEMBL ${realData.chembl_id||''}" when using ChEMBL data, "PubChem CID ${realData.pubchem_cid||''}" when using physicochemical data, or "Inferred from physicochemical data" as last resort
 - "summary": 2-sentence SAR narrative using only the provided data, no literature citations
 - "sources": array of only the real sources used e.g. ["ChEMBL CHEMBL1234", "PubChem CID 5284", "ClinicalTrials.gov"]
 
