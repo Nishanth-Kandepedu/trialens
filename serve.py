@@ -167,11 +167,19 @@ def fetch_pubchem_properties(compound):
 def fetch_real_sar_data(compound):
     result = {"bioactivity": [], "sources": [], "physicochemical": None}
     try:
-        search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=" + urllib.parse.quote(compound) + "&format=json&limit=1"
-        mol_data = http_get(search_url)
-        mols = mol_data.get("molecules",[])
-        if mols:
-            chembl_id = mols[0].get("molecule_chembl_id","")
+        # Try exact name first, then synonym search, then trade name
+        chembl_id = ""
+        for search_field in ["pref_name__iexact", "molecule_synonyms__synonym__iexact"]:
+            try:
+                search_url = "https://www.ebi.ac.uk/chembl/api/data/molecule?" + search_field + "=" + urllib.parse.quote(compound) + "&format=json&limit=1"
+                mol_data = http_get(search_url)
+                mols = mol_data.get("molecules", [])
+                if mols:
+                    chembl_id = mols[0].get("molecule_chembl_id", "")
+                    break
+            except Exception:
+                continue
+        if chembl_id:
             if chembl_id:
                 act_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&standard_type__in=IC50,Ki,EC50,Kd,GI50,AUC,Cmax,t1/2,CL,Vd,F,PPB,CLint&format=json&limit=50"
                 act_data = http_get(act_url)
@@ -206,8 +214,8 @@ def fetch_real_sar_data(compound):
                             })
                 except Exception:
                     pass
-                result["chembl_id"] = chembl_id
-                if result["bioactivity"]:
+                if result["bioactivity"] or True:
+                    result["chembl_id"] = chembl_id
                     result["sources"].append("ChEMBL (" + chembl_id + ")")
     except Exception as e:
         result["chembl_error"] = str(e)
