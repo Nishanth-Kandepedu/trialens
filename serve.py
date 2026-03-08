@@ -164,10 +164,47 @@ def fetch_pubchem_properties(compound):
         "heavy_atoms":      props.get("HeavyAtomCount"),
     }, cid
 
-def fetch_real_sar_data(compound):
-    result = {"bioactivity": [], "sources": [], "physicochemical": None}
+def fetch_pubchem_bioassay(cid):
+    """Fetch experimental bioassay data from PubChem for a given CID."""
+    assays = []
     try:
-        # Try exact name first, then synonym search, then trade name
+        # Get list of active assay IDs for this compound
+        aid_url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/assaysummary/JSON"
+        data = http_get(aid_url)
+        rows = data.get("Table", {}).get("Row", [])
+        # Extract ADMET-relevant assay data from summary
+        admet_keywords = ["herg", "cyp", "clearance", "half-life", "bioavail", "permeab",
+                          "protein bind", "toxicity", "ames", "metaboli", "absorption",
+                          "caco", "logp", "bbb", "pgp", "solubil", "plasma"]
+        for row in rows[:100]:  # limit to first 100
+            cells = row.get("Cell", [])
+            if len(cells) < 8:
+                continue
+            assay_name = str(cells[3]) if len(cells) > 3 else ""
+            outcome = str(cells[5]) if len(cells) > 5 else ""
+            activity_value = str(cells[6]) if len(cells) > 6 else ""
+            activity_unit = str(cells[7]) if len(cells) > 7 else ""
+            aid = str(cells[0]) if cells else ""
+            name_lower = assay_name.lower()
+            if any(kw in name_lower for kw in admet_keywords):
+                assays.append({
+                    "type": assay_name[:60],
+                    "value": activity_value,
+                    "unit": activity_unit,
+                    "outcome": outcome,
+                    "aid": aid,
+                    "source": "PubChem",
+                    "assay_category": "ADME"
+                })
+    except Exception:
+        pass
+    return assays[:20]  # cap at 20 most relevant
+
+def fetch_real_sar_data(compound):
+    result = {"bioactivity": [], "adme_data": [], "sources": [], "physicochemical": None}
+
+    # ── ChEMBL: Potency + ADME ──────────────────────────────────────────────
+    try:
         chembl_id = ""
         for search_field in ["pref_name__iexact", "molecule_synonyms__synonym__iexact"]:
             try:
@@ -179,54 +216,97 @@ def fetch_real_sar_data(compound):
                     break
             except Exception:
                 continue
+
         if chembl_id:
-            if chembl_id:
-                act_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&standard_type__in=IC50,Ki,EC50,Kd,GI50,AUC,Cmax,t1/2,CL,Vd,F,PPB,CLint&format=json&limit=50"
+            result["chembl_id"] = chembl_id
+
+            # Potency data
+            try:
+                act_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50&format=json&limit=50"
                 act_data = http_get(act_url)
-                for a in act_data.get("activities",[]):
+                for a in act_data.get("activities", []):
                     val = a.get("standard_value")
-                    unit = a.get("standard_units","")
-                    atype = a.get("standard_type","")
-                    assay_desc = a.get("assay_description","")
-                    doc_ref = a.get("document_chembl_id","")
                     if val:
                         result["bioactivity"].append({
-                            "type": atype, "value": val, "unit": unit,
-                            "assay": assay_desc[:80] if assay_desc else "",
-                            "reference": doc_ref, "source": "ChEMBL",
+                            "type": a.get("standard_type", ""),
+                            "value": val,
+                            "unit": a.get("standard_units", ""),
+                            "assay": (a.get("assay_description") or "")[:80],
+                            "reference": a.get("document_chembl_id", ""),
+                            "source": "ChEMBL",
+                            "assay_category": "potency"
                         })
-                # Also fetch ADME assays (assay_type=A)
-                try:
-                    adme_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=A&format=json&limit=30"
-                    adme_data = http_get(adme_url)
-                    for a in adme_data.get("activities", []):
-                        val = a.get("standard_value")
-                        unit = a.get("standard_units", "")
-                        atype = a.get("standard_type", "")
-                        assay_desc = a.get("assay_description", "")
-                        doc_ref = a.get("document_chembl_id", "")
-                        if val and atype:
-                            result["bioactivity"].append({
-                                "type": atype, "value": val, "unit": unit,
-                                "assay": assay_desc[:80] if assay_desc else "",
-                                "reference": doc_ref, "source": "ChEMBL",
-                                "assay_category": "ADME"
-                            })
-                except Exception:
-                    pass
-                if result["bioactivity"] or True:
-                    result["chembl_id"] = chembl_id
-                    result["sources"].append("ChEMBL (" + chembl_id + ")")
+            except Exception as e:
+                result["chembl_potency_error"] = str(e)
+
+            # ADME assays (assay_type=A covers ADME in ChEMBL)
+            try:
+                adme_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=A&format=json&limit=50"
+                adme_data = http_get(adme_url)
+                for a in adme_data.get("activities", []):
+                    val = a.get("standard_value")
+                    atype = a.get("standard_type", "")
+                    if val and atype:
+                        entry = {
+                            "type": atype,
+                            "value": val,
+                            "unit": a.get("standard_units", ""),
+                            "assay": (a.get("assay_description") or "")[:80],
+                            "reference": a.get("document_chembl_id", ""),
+                            "source": "ChEMBL",
+                            "assay_category": "ADME"
+                        }
+                        result["adme_data"].append(entry)
+                        result["bioactivity"].append(entry)
+            except Exception as e:
+                result["chembl_adme_error"] = str(e)
+
+            # Toxicity assays (assay_type=T)
+            try:
+                tox_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=T&format=json&limit=20"
+                tox_data = http_get(tox_url)
+                for a in tox_data.get("activities", []):
+                    val = a.get("standard_value")
+                    atype = a.get("standard_type", "")
+                    if val and atype:
+                        entry = {
+                            "type": atype,
+                            "value": val,
+                            "unit": a.get("standard_units", ""),
+                            "assay": (a.get("assay_description") or "")[:80],
+                            "reference": a.get("document_chembl_id", ""),
+                            "source": "ChEMBL",
+                            "assay_category": "toxicity"
+                        }
+                        result["adme_data"].append(entry)
+                        result["bioactivity"].append(entry)
+            except Exception:
+                pass
+
+            result["sources"].append("ChEMBL (" + chembl_id + ")")
     except Exception as e:
         result["chembl_error"] = str(e)
+
+    # ── PubChem: Physicochemical + Bioassay ──────────────────────────────────
     try:
         props, cid = fetch_pubchem_properties(compound)
         if props:
             result["physicochemical"] = props
             result["pubchem_cid"] = cid
             result["sources"].append("PubChem (CID " + str(cid) + ")")
+
+            # Also fetch PubChem bioassay ADMET data
+            try:
+                pubchem_assays = fetch_pubchem_bioassay(cid)
+                if pubchem_assays:
+                    result["adme_data"].extend(pubchem_assays)
+                    result["bioactivity"].extend(pubchem_assays)
+                    result["sources"].append("PubChem BioAssay")
+            except Exception:
+                pass
     except Exception as e:
         result["pubchem_error"] = str(e)
+
     return result
 
 # ── REQUEST HANDLER ────────────────────────────────────────────────────────────
