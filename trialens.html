@@ -722,7 +722,9 @@ async function runSearch() {
     await sleep(300);
     hideLoading();
     currentTrials = data.trials;
-    renderResults(q, data.trials, data.totalCount || data.trials.length);
+    const totalCount = (data.totalCount != null) ? data.totalCount : data.trials.length;
+    console.log('[Trials] fetched:', data.trials.length, 'totalCount from API:', data.totalCount);
+    renderResults(q, data.trials, totalCount);
   } catch(e) {
     hideLoading();
     showToast('Search failed: ' + e.message);
@@ -736,7 +738,7 @@ function renderResults(compound, trials, totalCount) {
   area.style.display = 'block';
 
   const showing = trials.length;
-  const total   = totalCount || showing;
+  const total   = (totalCount != null && totalCount >= showing) ? totalCount : showing;
   const isCapped = total > showing;
 
   document.getElementById('results-title').innerHTML = `Results for <em>${compound}</em>`;
