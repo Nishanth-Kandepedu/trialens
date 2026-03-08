@@ -944,7 +944,7 @@ function srcBadgeHtml(src) {
   // Only allow known real sources — reject anything that looks like a fabricated journal citation
   const isFake = /j med|pmid|nature|science|cancer|cell|lancet|nejm|chem|biol|pharmacol|[0-9]{4},\s*[0-9]+/i.test(src) 
     && !src.includes('ChEMBL') && !src.includes('PubChem') && !src.includes('ClinicalTrials') && !src.includes('Inferred');
-  if (isFake) return '<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:#c0392b12;color:#c0392b;border:1px solid #c0392b22;font-weight:600;">Unverified</span>';
+  if (isFake) return '<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:#c0392b12;color:#c0392b;border:1px solid #c0392b22;font-weight:600;">Unverified</span>';
 
   const sc = src.includes('ChEMBL') ? '#2a5f9e' : src.includes('PubChem') ? '#2a7a52' : src.includes('ClinicalTrials') ? '#6b4fa0' : '#7a756e';
 
@@ -954,16 +954,16 @@ function srcBadgeHtml(src) {
     const url = src.includes('CHEMBL') && !src.includes('CID') 
       ? 'https://www.ebi.ac.uk/chembl/document_report_card/' + src.replace(/.*?(CHEMBL\d+).*/,'$1')
       : 'https://www.ebi.ac.uk/chembl/compound_report_card/' + src.replace(/.*?(CHEMBL\d+).*/,'$1');
-    return `<a href="${url}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
+    return `<a href="${url}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
   }
 
   // Make PubChem CIDs clickable
   const pubchemMatch = src.match(/CID\s*(\d+)/);
   if (pubchemMatch) {
-    return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
+    return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${src} ↗</a>`;
   }
 
-  return `<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${src}</span>`;
+  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${src}</span>`;
 }
 
 function renderPotency(i, sar) {
