@@ -231,7 +231,8 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .trial-card.open .trial-expand-icon { background: var(--ink); color: var(--paper); border-color: var(--ink); transform: rotate(45deg); }
 .trial-main { flex: 1; min-width: 0; }
 .trial-id-row { display: flex; align-items: center; gap: 8px; margin-bottom: 5px; }
-.trial-nct { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--blue); letter-spacing: .5px; }
+.trial-nct { font-family: 'IBM Plex Mono', monospace; font-size: 11px; color: var(--blue); letter-spacing: .5px; text-decoration: none; }
+.trial-nct:hover { text-decoration: underline; }
 .trial-title-text { font-size: 14px; font-weight: 600; color: var(--ink); line-height: 1.35; margin-bottom: 8px; }
 .trial-badges { display: flex; flex-wrap: wrap; gap: 5px; }
 .badge { display: inline-block; font-family: 'IBM Plex Mono', monospace; font-size: 9px; letter-spacing: .5px; padding: 2px 8px; border-radius: 3px; text-transform: uppercase; font-weight: 500; }
@@ -826,7 +827,7 @@ function renderTrialCard(t, i) {
       <div class="trial-expand-icon" id="expand-${i}">+</div>
       <div class="trial-main">
         <div class="trial-id-row" style="display:flex;align-items:center;justify-content:space-between;">
-          <span class="trial-nct">${t.nctId||t.id||'N/A'}</span>
+          <a class="trial-nct" href="https://clinicaltrials.gov/study/${t.nctId||t.id}" target="_blank" rel="noopener" onclick="event.stopPropagation()" title="Open on ClinicalTrials.gov">${t.nctId||t.id||'N/A'} ↗</a>
           <button class="btn-download" onclick="event.stopPropagation();downloadTrial(${i})" title="Download full report">
             <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
             Download
