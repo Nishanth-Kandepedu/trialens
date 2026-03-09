@@ -647,18 +647,31 @@ class Handler(BaseHTTPRequestHandler):
         if path == "/api/feed":
             try:
                 import datetime
-                yesterday = (datetime.date.today() - datetime.timedelta(days=2)).strftime("%Y-%m-%d")
-                today = datetime.date.today().strftime("%Y-%m-%d")
-                params = urllib.parse.urlencode({
-                    "pageSize": "500", "format": "json",
-                    "sort": "LastUpdatePostDate:desc",
-                    "filter.advanced": (
-                        "AREA[LastUpdatePostDate]RANGE[" + yesterday + "," + today + "] AND "
-                        "AREA[StudyType]INTERVENTIONAL AND "
-                        "AREA[InterventionType]DRUG"
-                    )
-                })
-                data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
+                today = datetime.date.today()
+                # Expand window until we find results — handles weekends/holidays
+                # Try 2 days, then 7, then 14, then 30
+                trials_raw = []
+                window_days = 2
+                window_label = "48h"
+                for days, label in [(2,"48h"), (7,"7 days"), (14,"14 days"), (30,"30 days")]:
+                    since = (today - datetime.timedelta(days=days)).strftime("%Y-%m-%d")
+                    today_str = today.strftime("%Y-%m-%d")
+                    params = urllib.parse.urlencode({
+                        "pageSize": "500", "format": "json",
+                        "sort": "LastUpdatePostDate:desc",
+                        "filter.advanced": (
+                            "AREA[LastUpdatePostDate]RANGE[" + since + "," + today_str + "] AND "
+                            "AREA[StudyType]INTERVENTIONAL AND "
+                            "AREA[InterventionType]DRUG"
+                        )
+                    })
+                    data = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
+                    trials_raw = data.get("studies", [])
+                    window_days = days
+                    window_label = label
+                    if trials_raw:
+                        break  # found results, stop expanding
+                data = {"studies": trials_raw}
                 trials = []
                 for study in data.get("studies", []):
                     p = study.get("protocolSection", {})
@@ -682,7 +695,7 @@ class Handler(BaseHTTPRequestHandler):
                         "lastUpdate": last_update,
                         "startDate": start[:7] if start else "",
                     })
-                resp = json.dumps({"trials": trials, "total": len(trials)}).encode()
+                resp = json.dumps({"trials": trials, "total": len(trials), "window": window_label}).encode()
             except Exception as e:
                 resp = json.dumps({"error": str(e)}).encode()
 
