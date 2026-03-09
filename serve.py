@@ -14,8 +14,9 @@ BASE = pathlib.Path(__file__).parent
 GUEST_USERNAME = os.environ.get("GUEST_USERNAME", "guest")
 GUEST_PASSWORD = os.environ.get("GUEST_PASSWORD", "drugintelligence2025")
 
-# In-memory session store: token -> True
+# In-memory session store: token -> last_activity_timestamp
 SESSIONS = {}
+INACTIVITY_TIMEOUT = 30 * 60  # 30 minutes in seconds
 
 def hash_password(p):
     return hashlib.sha256(p.encode()).hexdigest()
@@ -25,11 +26,21 @@ def verify_credentials(username, password):
 
 def create_session():
     token = secrets.token_hex(32)
-    SESSIONS[token] = True
+    SESSIONS[token] = time.time()
     return token
 
+def touch_session(token):
+    if token and token in SESSIONS:
+        SESSIONS[token] = time.time()
+
 def is_valid_session(token):
-    return token and SESSIONS.get(token, False)
+    if not token or token not in SESSIONS:
+        return False
+    last_active = SESSIONS[token]
+    if time.time() - last_active > INACTIVITY_TIMEOUT:
+        del SESSIONS[token]
+        return False
+    return True
 
 def get_session_token(headers):
     cookie = headers.get("Cookie", "")
@@ -643,6 +654,7 @@ class Handler(BaseHTTPRequestHandler):
         if not is_valid_session(token):
             self.send_json({"error": "Unauthorised"}, 401)
             return
+        touch_session(token)  # reset inactivity timer on every API call
 
         if path == "/api/feed":
             try:

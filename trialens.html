@@ -1938,5 +1938,80 @@ function showToast(msg) {
   setTimeout(()=>t.classList.remove('show'), 3200);
 }
 </script>
+
+<!-- ── INACTIVITY LOGOUT ── -->
+<script>
+(function() {
+  const WARN_MS  = 25 * 60 * 1000; // 25 min — show warning
+  const LIMIT_MS = 30 * 60 * 1000; // 30 min — auto logout
+  let warnTimer, logoutTimer;
+
+  // Build warning banner (hidden initially)
+  const banner = document.createElement('div');
+  banner.id = 'inactivity-banner';
+  banner.style.cssText = `
+    display:none; position:fixed; bottom:24px; left:50%; transform:translateX(-50%);
+    background:var(--ink); color:var(--paper); padding:12px 20px; border-radius:10px;
+    font-family:'Inter',sans-serif; font-size:13px; font-weight:500;
+    box-shadow:0 4px 24px rgba(0,0,0,0.3); z-index:9999;
+    display:flex; align-items:center; gap:14px; white-space:nowrap;
+  `;
+  banner.innerHTML = `
+    <span>⏱ You'll be logged out in <strong id="inactivity-countdown">5:00</strong> due to inactivity</span>
+    <button onclick="resetInactivity()" style="background:var(--blue);color:#fff;border:none;padding:5px 14px;border-radius:6px;font-size:12px;font-weight:600;cursor:pointer;font-family:inherit;">Stay logged in</button>
+  `;
+  banner.style.display = 'none';
+  document.addEventListener('DOMContentLoaded', () => document.body.appendChild(banner));
+
+  let countdownInterval;
+
+  function showWarning() {
+    banner.style.display = 'flex';
+    let remaining = 5 * 60; // 5 minutes in seconds
+    document.getElementById('inactivity-countdown').textContent = '5:00';
+    countdownInterval = setInterval(() => {
+      remaining--;
+      const m = Math.floor(remaining / 60);
+      const s = remaining % 60;
+      const el = document.getElementById('inactivity-countdown');
+      if (el) el.textContent = m + ':' + String(s).padStart(2, '0');
+      if (remaining <= 0) clearInterval(countdownInterval);
+    }, 1000);
+  }
+
+  function hideWarning() {
+    banner.style.display = 'none';
+    clearInterval(countdownInterval);
+  }
+
+  async function doAutoLogout() {
+    hideWarning();
+    try {
+      await fetch('/api/logout', { method: 'POST', headers: {'Content-Type':'application/json'}, body: '{}' });
+    } catch(e) {}
+    window.location.href = '/login?reason=inactivity';
+  }
+
+  function resetTimers() {
+    clearTimeout(warnTimer);
+    clearTimeout(logoutTimer);
+    warnTimer   = setTimeout(showWarning,   WARN_MS);
+    logoutTimer = setTimeout(doAutoLogout,  LIMIT_MS);
+  }
+
+  window.resetInactivity = function() {
+    hideWarning();
+    resetTimers();
+  };
+
+  // Track any user activity
+  ['mousemove','mousedown','keydown','touchstart','scroll','click'].forEach(evt =>
+    document.addEventListener(evt, resetInactivity, { passive: true })
+  );
+
+  // Start timers on load
+  document.addEventListener('DOMContentLoaded', resetTimers);
+})();
+</script>
 </body>
 </html>
