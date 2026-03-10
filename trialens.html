@@ -561,7 +561,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
       </div>
     </div>
     <div class="metrics-strip" id="metrics-strip"></div>
-    <div id="compound-sar-panel" style="display:none;margin-bottom:28px;"></div>
+    <div id="compound-sar-panel" style="margin-bottom:28px;"></div>
     <div id="trials-list"></div>
     <div id="trials-pagination" style="display:none;align-items:center;justify-content:space-between;padding:14px 4px;margin-top:4px;">
       <span id="trials-page-info" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink3);"></span>
@@ -765,8 +765,26 @@ function renderResults(compound, trials, totalCount) {
     <div class="metric-card mc-gold"><div class="mc-label">Phase Coverage</div><div class="mc-value" style="font-size:16px;letter-spacing:-.3px;">${phases.join(' · ')||'—'}</div><div class="mc-sub">&nbsp;</div></div>
     <div class="metric-card mc-violet"><div class="mc-label">Data Sources</div><div class="mc-value">${sources.length}</div><div class="mc-sub">${sources.join(', ')}</div></div>`;
 
-  // Auto-trigger compound-level SAR panel
-  generateCompoundSAR(compound);
+  // Compound SAR panel — show as button card
+  const panel = document.getElementById('compound-sar-panel');
+  if (panel) {
+    panel.innerHTML = `
+      <div style="border:1px solid var(--paper3);border-radius:12px;overflow:hidden;background:var(--paper);">
+        <div style="padding:20px 28px;display:flex;align-items:center;justify-content:space-between;gap:16px;flex-wrap:wrap;">
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;">Compound Intelligence</div>
+            <div style="font-size:15px;font-weight:700;color:var(--ink);margin-bottom:4px;">${compound}</div>
+            <div style="font-size:12px;color:var(--ink3);">In Vitro · In Vivo · ADMET · SAR Narrative — sourced from ChEMBL &amp; PubChem</div>
+          </div>
+          <button class="btn-generate" onclick="generateCompoundSAR('${compound.replace(/'/g,"\\'")}')">
+            Generate SAR Profile
+          </button>
+        </div>
+      </div>`;
+  }
+
+  // Trial cards
+  allTrials = trials;
   trialsCurrentPage = 0;
   renderTrialsPage();
 }
@@ -847,7 +865,19 @@ function renderTrialCard(t, i) {
         <div class="dg-item"><div class="dg-label">Start Date</div><div class="dg-value">${t.startDate||'—'}</div></div>
         <div class="dg-item"><div class="dg-label">Est. Completion</div><div class="dg-value">${t.completionDate||'—'}</div></div>
       </div>
-      ${t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : ''}
+      ${(t.outcomes && t.outcomes.length) ? `
+        <div class="trial-outcome">
+          <div class="outcome-label" style="margin-bottom:8px;">Outcomes &amp; Measures</div>
+          ${t.outcomes.map(o => `
+            <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:6px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;white-space:nowrap;
+                background:${o.type==='primary'?'var(--blue-bg)':'var(--paper3)'};
+                color:${o.type==='primary'?'var(--blue)':'var(--ink4)'};
+                border:1px solid ${o.type==='primary'?'var(--blue-border)':'var(--paper3)'};
+                font-weight:600;">${o.type==='primary'?'PRIMARY':'SECONDARY'}</span>
+              <span style="font-size:13px;color:var(--ink2);">${o.measure}${o.timeframe ? `<span style="color:var(--ink4);font-size:11px;margin-left:6px;">${o.timeframe}</span>` : ''}</span>
+            </div>`).join('')}
+        </div>` : (t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : '')}
       ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
       <div class="sar-section" id="sar-section-${i}">
         <div class="sar-trigger">
@@ -1380,7 +1410,9 @@ function renderSARResults(i, sar) {
 }
 
 function switchTab(i, tab, el) {
-  const container = document.getElementById('sar-results-'+i);
+  // Find the closest ancestor with sar-tabs, then its parent as the container
+  const tabBar = el.closest('.sar-tabs');
+  const container = tabBar ? tabBar.parentElement : document.getElementById('sar-results-'+i);
   if (!container) return;
   container.querySelectorAll('.sar-tab').forEach(t => t.classList.remove('active'));
   container.querySelectorAll('.sar-tab-content').forEach(t => { t.classList.remove('active'); t.style.display = 'none'; });

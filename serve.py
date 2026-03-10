@@ -172,8 +172,19 @@ def fetch_trials(compound):
         phases   = design.get("phases", [])
         phase_str = normalise_phase(phases[0] if phases else "")
         raw_status = status.get("overallStatus","")
-        primary_outcomes = outcomes.get("primaryOutcomes",[])
-        primary_outcome = primary_outcomes[0].get("measure","") if primary_outcomes else ""
+        primary_outcomes   = outcomes.get("primaryOutcomes", [])
+        secondary_outcomes = outcomes.get("secondaryOutcomes", [])
+        primary_outcome    = primary_outcomes[0].get("measure","") if primary_outcomes else ""
+        # All measures with timeframe
+        all_outcomes = []
+        for o in primary_outcomes[:3]:
+            m = o.get("measure","").strip()
+            tf = o.get("timeFrame","").strip()
+            if m: all_outcomes.append({"type":"primary","measure":m,"timeframe":tf})
+        for o in secondary_outcomes[:4]:
+            m = o.get("measure","").strip()
+            tf = o.get("timeFrame","").strip()
+            if m: all_outcomes.append({"type":"secondary","measure":m,"timeframe":tf})
         trials.append({
             "nctId":        ident.get("nctId",""),
             "title":        ident.get("briefTitle",""),
@@ -186,6 +197,7 @@ def fetch_trials(compound):
             "completionDate": status.get("primaryCompletionDateStruct",{}).get("date",""),
             "summary":      desc.get("briefSummary",""),
             "primaryOutcome": primary_outcome,
+            "outcomes":       all_outcomes,
             "source":       "ClinicalTrials.gov",
         })
     return trials, total_count
@@ -487,17 +499,44 @@ def fetch_real_sar_data(compound):
             # ADME assays (assay_type=A covers ADME in ChEMBL)
             # Sub-categorise each entry into Absorption / Distribution / Metabolism / Excretion / Toxicity
             def admet_subcategory(atype, assay_desc):
-                t = (atype or '').upper()
+                t = (atype or '').upper().strip()
                 d = (assay_desc or '').lower()
-                if any(x in t for x in ['ABSORPT','PERM','CACO','PAMPA','F%','BIOAVAIL','FA'])                    or any(x in d for x in ['absorption','permeability','caco-2','pampa','oral bioavail','intestinal']):
+
+                # Absorption — permeability, oral bioavailability, Caco-2, PAMPA
+                abs_types = {'PAPP','PERMEABILITY','ABSORPT','CACO2','PAMPA','F','FA','%F','BIOAVAIL','LOG P','LOGP'}
+                abs_desc  = ['absorption','permeability','caco-2','caco2','pampa','oral bioavail','intestinal','efflux','p-gp','pgp','mdr1']
+                if t in abs_types or any(t.startswith(x) for x in ['PERM','ABSORPT','CACO','PAMPA','BIOAVAIL']) or any(x in d for x in abs_desc):
                     return 'Absorption'
-                if any(x in t for x in ['VD','VDSS','PPB','FU','LOG D','BLOOD'])                    or any(x in d for x in ['distribution','protein bind','plasma protein','volume of dist','blood-brain','bbb','tissue']):
+
+                # Distribution — protein binding, volume of distribution, tissue partitioning
+                dist_types = {'VD','VD/F','VDSS','VD_SS','PPB','FU','FUP','FUPLASMA','FU_PLASMA','PLASMA_PROTEIN_BINDING','LOG D','LOGD','KP'}
+                dist_desc  = ['protein bind','plasma protein','volume of dist','vdss','unbound fraction','fu,','blood-brain','bbb','tissue distribution','partitioning']
+                if t in dist_types or any(x in d for x in dist_desc):
                     return 'Distribution'
-                if any(x in t for x in ['CL','CLINT','CLH','CLR','CYP','UGT','METABOL','INTRINSIC','T1/2','HALF','THALF'])                    or any(x in d for x in ['metabol','cyp','ugt','microsom','hepatocyte','intrinsic clearance','half-life','oxidation','glucuronid']):
-                    return 'Metabolism'
-                if any(x in t for x in ['RENAL','EXCRET','AUC','CMAX','TMAX','URINE','BILIARY'])                    or any(x in d for x in ['excretion','renal','urine','biliary','fecal','auc','cmax','tmax','elimination']):
+
+                # Excretion — AUC, Cmax, Tmax, renal, urine, PK parameters
+                excr_types = {'AUC','AUCINF','AUC0-INF','AUC0-T','AUC_0-INF','CMAX','TMAX','CLR','CL_RENAL','RENAL_CL','MRT','URINE'}
+                excr_desc  = ['excretion','renal clearance','urinary','urine','biliary','fecal','faecal','auc','cmax','tmax','mean residence','elimination half']
+                if t in excr_types or any(t.startswith(x) for x in ['AUC','CMAX','TMAX','CLR']) or any(x in d for x in excr_desc):
                     return 'Excretion'
-                return 'Metabolism'  # most common default for assay_type=A
+
+                # Metabolism — half-life, intrinsic clearance, CYP, microsomal
+                metab_types = {'T1/2','THALF','HALF-LIFE','HALF_LIFE','CL','CLINT','CLINTRINSIC','CLH','CLHEP','CL/F','CLtot',
+                               'CYP1A2','CYP2C9','CYP2C19','CYP2D6','CYP3A4','CYP3A5','CYP2B6','CYP2C8',
+                               'INTRINSIC_CL','MICROSOMAL_CL','METABOLIC_STABILITY'}
+                metab_desc  = ['metabol','cyp','ugt','microsom','hepatocyte','intrinsic clearance','half-life','t1/2',
+                               'oxidation','glucuronid','hydroxyl','demethyl','first-pass','liver','hepatic']
+                if t in metab_types or any(t.startswith(x) for x in ['CYP','CL','T1/2','THALF','CLH','CLINT']) or any(x in d for x in metab_desc):
+                    return 'Metabolism'
+
+                # Default — use description as final tiebreak
+                if any(x in d for x in ['absorpt','permea','caco','pampa']):
+                    return 'Absorption'
+                if any(x in d for x in ['distribut','protein','vd ','vdss']):
+                    return 'Distribution'
+                if any(x in d for x in ['excret','renal','urin','biliar','auc','cmax']):
+                    return 'Excretion'
+                return 'Metabolism'
 
             try:
                 adme_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=A&format=json&limit=200"
