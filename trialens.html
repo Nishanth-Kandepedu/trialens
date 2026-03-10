@@ -1029,19 +1029,29 @@ async function generateSAR(i) {
     setProgress(55, 'Building potency table...');
     const parseSpecies = assayStr => {
       const d = (assayStr || '').toLowerCase();
-      if (d.includes('human'))                              return 'Homo sapiens';
-      if (d.includes('rat') || d.includes('rattus'))       return 'Rattus norvegicus';
-      if (d.includes('mouse') || d.includes('murine'))     return 'Mus musculus';
-      if (d.includes('monkey') || d.includes('primate'))   return 'Non-human primate';
-      if (d.includes('dog') || d.includes('canine'))       return 'Canis lupus familiaris';
-      if (d.includes('rabbit'))                            return 'Oryctolagus cuniculus';
+      if (d.includes('human') || d.includes('homo sapiens')) return 'Human';
+      if (d.includes('rat') || d.includes('rattus'))         return 'Rat';
+      if (d.includes('mouse') || d.includes('murine') || d.includes('mus musculus')) return 'Mouse';
+      if (d.includes('monkey') || d.includes('primate'))     return 'Non-human primate';
+      if (d.includes('dog') || d.includes('canine'))         return 'Dog';
+      if (d.includes('rabbit'))                              return 'Rabbit';
       return '';
     };
+    // Normalise any existing species strings from serve.py to short form
+    const normSp = sp => {
+      const s = (sp||'').toLowerCase();
+      if (!s) return '';
+      if (s.includes('homo') || s === 'human') return 'Human';
+      if (s.includes('rattus') || s === 'rat') return 'Rat';
+      if (s.includes('mus ') || s === 'mouse' || s.includes('murine')) return 'Mouse';
+      return sp; // already short (e.g. 'Non-human primate') or unknown
+    };
     const humanRatMouse = sp => {
-      const s = (sp || '').toLowerCase();
-      return !s || s.includes('homo') || s.includes('human') ||
-             s.includes('rat') || s.includes('rattus') ||
-             s.includes('mouse') || s.includes('mus ') || s.includes('murine');
+      if (!sp) return true; // unknown = allow through
+      const s = sp.toLowerCase();
+      return s === 'human' || s === 'rat' || s === 'mouse' ||
+             s.includes('homo') || s.includes('rattus') ||
+             s.includes('mus ') || s.includes('murine');
     };
     const potencyTableDirect = potencyData
       .filter(a => cleanVal(a.value) && humanRatMouse(a.species || parseSpecies(a.assay)))
@@ -1051,7 +1061,8 @@ async function generateSAR(i) {
         value:     a.value,
         unit:      a.unit,
         assay:     (a.assay || '').substring(0, 100),
-        species:   a.species || parseSpecies(a.assay),
+        species:   normSp(a.species) || parseSpecies(a.assay),
+        pchembl_value: a.pchembl_value || null,
         reference: a.reference || a.ref || '',
         source:    a.source || 'ChEMBL',
       }));
@@ -1220,22 +1231,35 @@ function tablePage(tid, size, dir) {
 function renderPotency(i, sar) {
   const rows = (sar.potency_table||[]);
 
-  // Find key values for summary cards
-  const findVal = (kw) => {
-    const r = rows.find(r=>(r.endpoint||'').toLowerCase().includes(kw.toLowerCase()));
-    return r ? { val: r.value, unit: r.unit } : null;
+  // Species pill — short canonical label + colour
+  const SP_COLOR = { 'Human':'#1a5eb5', 'Rat':'#1a7a4a', 'Mouse':'#7a4a1a' };
+  const spPill = sp => {
+    if (!sp) return '';
+    const col = SP_COLOR[sp] || '#555';
+    return `<span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;
+      letter-spacing:.5px;padding:2px 7px;border-radius:10px;background:${col}18;color:${col};
+      border:1px solid ${col}30;white-space:nowrap;">${sp}</span>`;
   };
-  const primary = rows[0] || {};
-  const herg = findVal('hERG') || findVal('herg');
-  const selectivity = findVal('selectivity') || findVal('Selectivity');
 
-  // Build up to 4 summary cards from available data
-  const realRows = rows.filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'));
-  const cardDefs = realRows.length === 0 ? [] : [
-    primary.value && primary.value !== 'Not available' ? { label: primary.endpoint||'Primary Target', value: primary.value, unit: primary.unit||'', sub: 'Primary endpoint', pct: 95, color: '#2a5f9e' } : null,
-    herg ? { label: 'hERG IC50', value: herg.val, unit: herg.unit, sub: 'Cardiac safety', pct: 30, color: '#2a7a52' } : null,
-    selectivity ? { label: 'Selectivity', value: selectivity.val, unit: selectivity.unit, sub: 'vs. off-target', pct: 80, color: '#c8922a' } : null,
-    realRows.length > 1 ? { label: 'Endpoints', value: realRows.length, unit: '', sub: 'Total measured', pct: (realRows.length/6)*100, color: '#6b4fa0' } : null,
+  // Valid rows only, sorted most-potent first (highest pchembl_value = lowest IC50)
+  const validRows = rows.filter(r =>
+    r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-')
+  ).sort((a, b) => {
+    const pa = parseFloat(a.pchembl_value ?? -Infinity);
+    const pb = parseFloat(b.pchembl_value ?? -Infinity);
+    if (pb !== pa) return pb - pa;                    // pchembl desc
+    return parseFloat(a.value) - parseFloat(b.value); // raw value asc as tiebreak
+  });
+
+  // Summary cards — most potent endpoint + hERG + count
+  const primary = validRows[0] || {};
+  const herg = validRows.find(r => /herg/i.test(r.endpoint||''));
+  const bestHuman = validRows.find(r => r.species === 'Human');
+  const cardDefs = validRows.length === 0 ? [] : [
+    primary.value ? { label: primary.endpoint||'Primary', value: primary.value, unit: primary.unit||'', sub: primary.species ? `Most potent · ${primary.species}` : 'Most potent', pct: 95, color: '#2a5f9e' } : null,
+    bestHuman && bestHuman !== primary ? { label: bestHuman.endpoint, value: bestHuman.value, unit: bestHuman.unit||'', sub: 'Best human assay', pct: 80, color: '#1a5eb5' } : null,
+    herg ? { label: 'hERG IC50', value: herg.value, unit: herg.unit||'', sub: 'Cardiac safety', pct: 30, color: '#c0392b' } : null,
+    validRows.length > 1 ? { label: 'Measurements', value: validRows.length, unit: '', sub: 'Total binding assays', pct: Math.min((validRows.length/20)*100,100), color: '#6b4fa0' } : null,
   ].filter(Boolean).slice(0,4);
 
   const cards = cardDefs.map(c=>`
@@ -1246,39 +1270,58 @@ function renderPotency(i, sar) {
       <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
     </div>`).join('');
 
-  const sourceOrder = {'ChEMBL':0,'PubChem BioAssay':1,'PubChem':2};
-  const tableRows = rows
-    .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'))
-    .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
-    .map(r => {
+  // Group by endpoint type
+  const groups = {};
+  const groupOrder = ['IC50','Ki','Kd','EC50','GI50','MIC','CC50','AC50','Potency'];
+  validRows.forEach(r => {
+    const key = (r.endpoint||'Other').toUpperCase();
+    const grp = groupOrder.find(g => key.includes(g)) || r.endpoint || 'Other';
+    if (!groups[grp]) groups[grp] = [];
+    groups[grp].push(r);
+  });
+  const orderedGroups = [
+    ...groupOrder.filter(g => groups[g]),
+    ...Object.keys(groups).filter(g => !groupOrder.includes(g))
+  ];
+
+  // Build rows — grouped with a subtle group header row
+  const tableRowsArr = [];
+  orderedGroups.forEach(grp => {
+    const grpRows = groups[grp];
+    // Group header
+    tableRowsArr.push(`<tr>
+      <td colspan="5" style="padding:10px 16px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;
+        letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);background:var(--paper2);
+        border-bottom:1px solid var(--paper3);">${grp}</td>
+    </tr>`);
+    grpRows.forEach(r => {
       const docRef = r.reference || r.ref || '';
-      // Show doc ref link if it looks like a real ChEMBL doc ID (has digits), else show source badge
-      const sourceBadge = (docRef && /^CHEMBL\d+$/i.test(docRef))
-        ? srcBadgeHtml(docRef)
-        : srcBadgeHtml(r.source);
-      return `<tr>
-        <td class="p-endpoint">${r.endpoint||''}</td>
-        <td class="p-value">${r.value||''}</td>
+      const sourceBadge = (docRef && /^CHEMBL\d+$/i.test(docRef)) ? srcBadgeHtml(docRef) : srcBadgeHtml(r.source);
+      tableRowsArr.push(`<tr>
+        <td class="p-endpoint" style="padding-left:20px;">${r.endpoint||''}</td>
+        <td class="p-value" style="font-weight:700;">${r.value||''}</td>
         <td class="p-unit">${r.unit||''}</td>
-        <td class="p-assay" style="font-size:12px;">${r.assay||''}</td>
-        <td style="font-size:11px;color:var(--ink3);font-style:italic;">${r.species||'—'}</td>
+        <td class="p-assay" style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,80)}</td>
+        <td style="white-space:nowrap;">${spPill(r.species)}</td>
         <td style="white-space:nowrap;">${sourceBadge}</td>
-      </tr>`;
-    });  // Keep as array for pagination
+      </tr>`);
+    });
+  });
 
   const rd = sar._realData || {};
   const lookupLog = rd.chembl_lookup_log ? rd.chembl_lookup_log.join(' | ') : '';
-  const noPotency = !realRows.length ? `<div style="padding:20px;color:var(--ink3);font-size:13px;">
+  const noPotency = !validRows.length ? `<div style="padding:20px;color:var(--ink3);font-size:13px;">
     No bioactivity data found in ChEMBL for this compound.
     ${rd.chembl_id ? '' : '<br><span style="font-size:11px;font-family:IBM Plex Mono,monospace;color:#c0392b;">ChEMBL lookup failed — check browser console for details.</span>'}
     ${lookupLog ? `<details style="margin-top:8px;"><summary style="font-size:11px;cursor:pointer;color:var(--ink3);">Debug log</summary><pre style="font-size:10px;color:var(--ink3);white-space:pre-wrap;margin-top:4px;">${lookupLog}</pre></details>` : ''}
   </div>` : '';
-  const potPaged = realRows.length ? paginatedTable(tableRows, 'pot-'+i) : null;
+
+  const potPaged = validRows.length ? paginatedTable(tableRowsArr, 'pot-'+i) : null;
 
   return `
     <div class="sec-lbl">Binding Data</div>
     ${noPotency}
-    ${realRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>
+    ${validRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
     <table class="potency-table">
       <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Species</th><th>Source</th></tr></thead>
@@ -1372,10 +1415,11 @@ function renderAdmet(i, sar) {
   };
   // Filter to human/rat/mouse only
   const humanRatMouseAdmet = sp => {
-    const s = (sp || '').toLowerCase();
-    return !s || s.includes('homo') || s.includes('human') ||
-           s.includes('rat') || s.includes('rattus') ||
-           s.includes('mouse') || s.includes('mus ') || s.includes('murine');
+    if (!sp) return true;
+    const s = sp.toLowerCase();
+    return s === 'human' || s === 'rat' || s === 'mouse' ||
+           s.includes('homo') || s.includes('rattus') ||
+           s.includes('mus ') || s.includes('murine');
   };
   const admetRowsArr = rows
     .filter(r => hasVerifiedSource(r.source))
@@ -1396,9 +1440,9 @@ function renderAdmet(i, sar) {
       let sp = r.species || '';
       if (!sp) {
         const prop = (r.property||'').toLowerCase();
-        if (prop.includes('human')) sp = 'Homo sapiens';
-        else if (prop.includes('rat')) sp = 'Rattus norvegicus';
-        else if (prop.includes('mouse') || prop.includes('murine')) sp = 'Mus musculus';
+        if (prop.includes('human')) sp = 'Human';
+        else if (prop.includes('rat')) sp = 'Rat';
+        else if (prop.includes('mouse') || prop.includes('murine')) sp = 'Mouse';
       }
       const spStr = sp ? `<span style="font-size:10px;color:var(--ink3);font-style:italic;">${sp}</span>` : '';
       return `<tr>

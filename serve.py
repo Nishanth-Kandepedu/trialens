@@ -405,6 +405,30 @@ def resolve_chembl_id(compound):
 
 
 def fetch_real_sar_data(compound):
+    def norm_species(raw):
+        """Canonical species normaliser — single source of truth."""
+        s = (raw or '').lower().strip()
+        if not s: return ''
+        if 'homo sapiens' in s or s == 'human' or s.startswith('human '): return 'Human'
+        if 'rattus' in s or s == 'rat' or s.startswith('rat '): return 'Rat'
+        if 'mus musculus' in s or s == 'mouse' or 'murine' in s: return 'Mouse'
+        if 'macaca' in s or 'monkey' in s or 'primate' in s: return 'Non-human primate'
+        if 'canis' in s or 'canine' in s or ' dog' in s: return 'Dog'
+        if 'saccharomyces' in s or 'yeast' in s: return 'Yeast'
+        if 'e. coli' in s or 'escherichia' in s: return 'E. coli'
+        if s: return raw.strip()  # preserve unknown species verbatim
+        return ''
+    def species_from_desc(assay_desc, target_name=''):
+        d = ((assay_desc or '') + ' ' + (target_name or '')).lower()
+        if 'homo sapiens' in d or 'human' in d: return 'Human'
+        if 'rattus' in d or ' rat ' in d or d.startswith('rat '): return 'Rat'
+        if 'mus musculus' in d or 'mouse' in d or 'murine' in d: return 'Mouse'
+        if 'macaca' in d or 'monkey' in d or 'primate' in d: return 'Non-human primate'
+        if 'canis' in d or 'canine' in d or ' dog ' in d: return 'Dog'
+        if 'saccharomyces' in d or 'yeast' in d: return 'Yeast'
+        if 'e. coli' in d or 'escherichia' in d: return 'E. coli'
+        return ''
+
     result = {"bioactivity": [], "adme_data": [], "sources": [], "physicochemical": None}
 
     # ── ChEMBL: Potency + ADME ──────────────────────────────────────────────
@@ -433,22 +457,15 @@ def fetch_real_sar_data(compound):
                     for a in activities:
                         val = a.get("standard_value")
                         if val:
-                            # ChEMBL activity endpoint returns target_organism reliably
-                            species = (a.get("target_organism") or a.get("assay_organism") or "").strip()
-                            # Fallback: parse from assay/target description
-                            if not species:
-                                desc = ((a.get("assay_description") or "") + " " + (a.get("target_pref_name") or "")).lower()
-                                if "homo sapiens" in desc or "human" in desc: species = "Homo sapiens"
-                                elif "rattus" in desc or " rat " in desc or desc.startswith("rat "): species = "Rattus norvegicus"
-                                elif "mus musculus" in desc or "mouse" in desc or "murine" in desc: species = "Mus musculus"
-                                elif "macaca" in desc or "monkey" in desc or "primate" in desc: species = "Non-human primate"
-                                elif "canis" in desc or "canine" in desc or " dog " in desc: species = "Canis lupus familiaris"
-                                elif "saccharomyces" in desc or "yeast" in desc: species = "S. cerevisiae"
-                                elif "e. coli" in desc or "escherichia" in desc: species = "E. coli"
+                            raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                            species = norm_species(raw_sp) or species_from_desc(
+                                a.get("assay_description"), a.get("target_pref_name"))
+                            pchembl = a.get("pchembl_value")
                             result["bioactivity"].append({
                                 "type":           a.get("standard_type", ""),
                                 "value":          val,
                                 "unit":           a.get("standard_units", ""),
+                                "pchembl_value":  float(pchembl) if pchembl else None,
                                 "assay":          (a.get("assay_description") or "")[:120],
                                 "target":         (a.get("target_pref_name") or "")[:80],
                                 "species":        species,
@@ -475,14 +492,9 @@ def fetch_real_sar_data(compound):
                     val = a.get("standard_value")
                     atype = a.get("standard_type", "")
                     if val and atype:
-                        species = (a.get("target_organism") or a.get("assay_organism") or "").strip()
-                        if not species:
-                            desc = ((a.get("assay_description") or "") + " " + (a.get("target_pref_name") or "")).lower()
-                            if "homo sapiens" in desc or "human" in desc: species = "Homo sapiens"
-                            elif "rattus" in desc or " rat " in desc: species = "Rattus norvegicus"
-                            elif "mus musculus" in desc or "mouse" in desc or "murine" in desc: species = "Mus musculus"
-                            elif "macaca" in desc or "monkey" in desc or "primate" in desc: species = "Non-human primate"
-                            elif "canis" in desc or "canine" in desc: species = "Canis lupus familiaris"
+                        raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                        species = norm_species(raw_sp) or species_from_desc(
+                            a.get("assay_description"), a.get("target_pref_name"))
                         entry = {
                             "type": atype,
                             "value": val,
@@ -506,14 +518,9 @@ def fetch_real_sar_data(compound):
                     val = a.get("standard_value")
                     atype = a.get("standard_type", "")
                     if val and atype:
-                        species = (a.get("target_organism") or a.get("assay_organism") or "").strip()
-                        if not species:
-                            desc = ((a.get("assay_description") or "") + " " + (a.get("target_pref_name") or "")).lower()
-                            if "homo sapiens" in desc or "human" in desc: species = "Homo sapiens"
-                            elif "rattus" in desc or " rat " in desc: species = "Rattus norvegicus"
-                            elif "mus musculus" in desc or "mouse" in desc or "murine" in desc: species = "Mus musculus"
-                            elif "macaca" in desc or "monkey" in desc or "primate" in desc: species = "Non-human primate"
-                            elif "canis" in desc or "canine" in desc: species = "Canis lupus familiaris"
+                        raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                        species = norm_species(raw_sp) or species_from_desc(
+                            a.get("assay_description"), a.get("target_pref_name"))
                         entry = {
                             "type": atype,
                             "value": val,
