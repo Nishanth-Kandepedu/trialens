@@ -561,6 +561,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
       </div>
     </div>
     <div class="metrics-strip" id="metrics-strip"></div>
+    <div id="compound-sar-panel" style="display:none;margin-bottom:28px;"></div>
     <div id="trials-list"></div>
     <div id="trials-pagination" style="display:none;align-items:center;justify-content:space-between;padding:14px 4px;margin-top:4px;">
       <span id="trials-page-info" style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink3);"></span>
@@ -764,8 +765,8 @@ function renderResults(compound, trials, totalCount) {
     <div class="metric-card mc-gold"><div class="mc-label">Phase Coverage</div><div class="mc-value" style="font-size:16px;letter-spacing:-.3px;">${phases.join(' · ')||'—'}</div><div class="mc-sub">&nbsp;</div></div>
     <div class="metric-card mc-violet"><div class="mc-label">Data Sources</div><div class="mc-value">${sources.length}</div><div class="mc-sub">${sources.join(', ')}</div></div>`;
 
-  // Trial cards — paginated 10 per page
-  allTrials = trials;
+  // Auto-trigger compound-level SAR panel
+  generateCompoundSAR(compound);
   trialsCurrentPage = 0;
   renderTrialsPage();
 }
@@ -945,6 +946,179 @@ Return ONLY valid JSON. No markdown.`,
     progressEl.classList.remove('active');
     btn.disabled = false;
     showToast('Dose-response failed: ' + e.message);
+  }
+}
+
+// ── COMPOUND-LEVEL SAR PANEL ────────────────────────────────────
+let compoundSarCache = null;
+
+async function generateCompoundSAR(compound) {
+  const panel = document.getElementById('compound-sar-panel');
+  if (!panel) return;
+
+  // Show loading state
+  panel.style.display = 'block';
+  panel.innerHTML = `
+    <div style="border:1px solid var(--paper3);border-radius:12px;overflow:hidden;background:var(--paper);">
+      <div style="padding:16px 24px;background:var(--paper2);border-bottom:1px solid var(--paper3);
+        display:flex;align-items:center;justify-content:space-between;">
+        <div>
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;
+            text-transform:uppercase;color:var(--ink4);margin-bottom:4px;">Compound Intelligence</div>
+          <div style="font-size:16px;font-weight:700;color:var(--ink);">${compound}</div>
+        </div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink4);">
+          ChEMBL · PubChem
+        </div>
+      </div>
+      <div style="padding:32px;display:flex;align-items:center;gap:16px;">
+        <div class="loader-spinner"></div>
+        <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:var(--ink3);" id="csar-label">
+          Searching ChEMBL &amp; PubChem…
+        </div>
+      </div>
+    </div>`;
+
+  try {
+    const setLabel = t => { const el = document.getElementById('csar-label'); if(el) el.textContent = t; };
+
+    // Fetch real data
+    setLabel('Fetching bioactivity data…');
+    const res = await fetch('/api/chembl', {
+      method: 'POST',
+      headers: {'Content-Type':'application/json'},
+      body: JSON.stringify({ compound, token: sessionStorage.getItem('auth_token') })
+    });
+    const realData = await res.json();
+
+    setLabel('Building SAR profile…');
+
+    // Build a minimal synthetic SAR object from real data only (no Claude)
+    const cleanVal = v => v && !String(v).match(/^\d+[-–]\d+$/) && String(v) !== 'null';
+    const potencyTypes = new Set(['IC50','Ki','EC50','Kd','GI50','MIC','CC50','AC50','Potency']);
+    const allBio = realData.bioactivity || [];
+    const potencyData = allBio.filter(a => a.assay_category === 'potency' || potencyTypes.has(a.type));
+    const admeData   = (realData.adme_data || []).filter(a => cleanVal(a.value));
+    const invivoData = (realData.invivo_data || []).filter(a => cleanVal(a.value));
+
+    const normSp = sp => {
+      const s = (sp||'').toLowerCase();
+      if (!s) return '';
+      if (s.includes('homo') || s === 'human') return 'Human';
+      if (s.includes('rattus') || s === 'rat') return 'Rat';
+      if (s.includes('mus ') || s === 'mouse' || s.includes('murine')) return 'Mouse';
+      return sp;
+    };
+    const parseSpecies = assayStr => {
+      const d = (assayStr||'').toLowerCase();
+      if (d.includes('human') || d.includes('homo')) return 'Human';
+      if (d.includes('rat') || d.includes('rattus')) return 'Rat';
+      if (d.includes('mouse') || d.includes('murine')) return 'Mouse';
+      return '';
+    };
+
+    const potencyTableDirect = potencyData
+      .filter(a => cleanVal(a.value))
+      .slice(0, 50)
+      .map(a => ({
+        endpoint: a.type, value: a.value, unit: a.unit,
+        assay: (a.assay||'').substring(0,100),
+        species: normSp(a.species) || parseSpecies(a.assay),
+        pchembl_value: a.pchembl_value || null,
+        reference: a.reference || '', source: a.source || 'ChEMBL',
+      }));
+
+    const rateAdmet = (type, value, unit) => {
+      const t = (type||'').toLowerCase(); const v = parseFloat(value);
+      if (isNaN(v)) return 'moderate';
+      if (t.includes('t1/2') || t.includes('half')) {
+        const h = (unit||'').toLowerCase().includes('min') ? v/60 : v;
+        return h >= 6 ? 'good' : h >= 1 ? 'moderate' : 'poor';
+      }
+      if (t.includes('cl') || t.includes('clearance')) return v < 15 ? 'good' : v < 70 ? 'moderate' : 'poor';
+      if (t.includes('f%') || t.includes('bioavail')) return v >= 70 ? 'good' : v >= 30 ? 'moderate' : 'poor';
+      if (t.includes('herg')) { const u = (unit||'').toLowerCase().includes('nm') ? v/1000 : v; return u > 30 ? 'good' : u > 1 ? 'moderate' : 'poor'; }
+      return 'moderate';
+    };
+    const admetDirect = admeData.slice(0,60).map(a => ({
+      property: a.type, value: a.value, unit: a.unit||'',
+      assay: (a.assay||'').substring(0,100),
+      rating: rateAdmet(a.type, a.value, a.unit),
+      source: a.reference || a.source || 'ChEMBL',
+      assay_category: a.assay_category || 'Metabolism',
+    }));
+
+    // Generate narrative with Claude
+    setLabel('Generating compound narrative…');
+    const pcid = realData.pubchem_cid || '';
+    const pc = realData.physicochemical || {};
+    const physLines = pc.molecular_weight ? `MW=${pc.molecular_weight} | LogP=${pc.logp??'N/A'} | TPSA=${pc.tpsa??'N/A'} Å²` : 'NONE';
+    const potLines = potencyData.filter(a=>cleanVal(a.value)).slice(0,20)
+      .map(a=>`${a.type}=${a.value} ${a.unit} | assay: ${(a.assay||'').slice(0,50)}`).join('\n') || 'NONE';
+    const admeLines = admeData.slice(0,20)
+      .map(a=>`${a.type}=${a.value} ${a.unit} | assay: ${(a.assay||'').slice(0,50)}`).join('\n') || 'NONE';
+
+    const narrativeResult = await callClaude(
+`You are writing a compound-level pharmacology summary for "${compound}".
+Use ONLY the data provided below.
+
+[POTENCY — ChEMBL ${realData.chembl_id||''}]
+${potLines}
+
+[ADME/TOX — ChEMBL ${realData.chembl_id||''}]
+${admeLines}
+
+[PHYSICOCHEMICAL — PubChem CID ${pcid}]
+${physLines}
+
+Return a JSON object with ONE key:
+"summary": A 3-4 sentence compound-level narrative covering: (1) primary potency/target profile from actual data, (2) key ADME characteristics, (3) notable physicochemical properties, (4) overall drug-likeness assessment. Be specific about real values. If data is sparse, say so clearly.
+
+Return ONLY valid JSON.`,
+      'You are an expert medicinal chemist. Use only data provided. Return ONLY valid JSON.'
+    );
+
+    const sar = {
+      potency_table: potencyTableDirect,
+      admet: admetDirect,
+      invivo_data: invivoData,
+      summary: narrativeResult.summary || '',
+      physicochemical: realData.physicochemical || null,
+      _realData: realData,
+      _sources: realData.sources || [],
+    };
+    compoundSarCache = sar;
+
+    // Render into panel — same tab system but no Dose-Response
+    panel.innerHTML = `
+      <div style="border:1px solid var(--paper3);border-radius:12px;overflow:hidden;background:var(--paper);">
+        <div style="padding:16px 24px;background:var(--paper2);border-bottom:1px solid var(--paper3);
+          display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:8px;">
+          <div>
+            <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;
+              text-transform:uppercase;color:var(--ink4);margin-bottom:4px;">Compound Intelligence</div>
+            <div style="font-size:16px;font-weight:700;color:var(--ink);">${compound}</div>
+          </div>
+          <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
+            ${realData.chembl_id ? `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${realData.chembl_id}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--blue);text-decoration:none;font-weight:600;">ChEMBL ${realData.chembl_id} ↗</a>` : ''}
+            ${realData.pubchem_cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${realData.pubchem_cid}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--green);text-decoration:none;font-weight:600;">PubChem ${realData.pubchem_cid} ↗</a>` : ''}
+          </div>
+        </div>
+        <div class="sar-tabs" style="padding:0 20px;">
+          <div class="sar-tab active" onclick="switchTab('csar','potency',this)">In Vitro</div>
+          <div class="sar-tab" onclick="switchTab('csar','invivo',this)">In Vivo</div>
+          <div class="sar-tab" onclick="switchTab('csar','admet',this)">ADMET</div>
+          <div class="sar-tab" onclick="switchTab('csar','narrative',this)">SAR Narrative</div>
+        </div>
+        <div class="sar-tab-content active" id="tab-csar-potency" style="padding:28px 32px;">${renderPotency('csar', sar)}</div>
+        <div class="sar-tab-content" id="tab-csar-invivo" style="display:none;padding:28px 32px;">${renderInVivo('csar', sar)}</div>
+        <div class="sar-tab-content" id="tab-csar-admet" style="display:none;padding:28px 32px;">${renderAdmet('csar', sar)}</div>
+        <div class="sar-tab-content" id="tab-csar-narrative" style="display:none;padding:28px 32px;">${renderNarrative('csar', sar)}</div>
+      </div>`;
+
+  } catch(e) {
+    panel.innerHTML = `<div style="padding:16px;color:var(--ink3);font-size:13px;font-family:'IBM Plex Mono',monospace;">
+      Could not load compound intelligence: ${e.message}</div>`;
   }
 }
 
@@ -2116,6 +2290,9 @@ function clearResults() {
   document.getElementById('results-area').style.display = 'none';
   document.getElementById('hero-section').style.display = 'block';
   document.getElementById('search-input').value = '';
+  const csarPanel = document.getElementById('compound-sar-panel');
+  if (csarPanel) { csarPanel.style.display = 'none'; csarPanel.innerHTML = ''; }
+  compoundSarCache = null;
   currentCompound = ''; currentTrials = []; sarCache = {};
 }
 
