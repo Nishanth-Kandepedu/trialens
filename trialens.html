@@ -1528,7 +1528,7 @@ function renderDose(i, sar) {
     <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;margin-bottom:16px;
       background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:6px;
       font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gold);">
-      ⚠ AI-synthesised from ClinicalTrials.gov trial text — not raw measurement data. Verify against primary publications.
+      ⚠ AI-inferred from trial metadata (phase, condition, primary outcome) — not measured clinical data. Verify against primary publications.
     </div>
     <div class="stat-cards stat-cards-4">${cards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
@@ -1541,59 +1541,66 @@ function renderDose(i, sar) {
 
 function renderAdmet(i, sar) {
   const rows = (sar.admet||[]).filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A');
-  const pc = sar.physicochemical || null;
-  const rmap = {good:3, moderate:2, poor:1};
-  const barColor = r => r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a';
   const ri = r => r==='good'?'▲':r==='poor'?'▼':'●';
   const rc = r => r==='good'?'r-good':r==='poor'?'r-poor':'r-mod';
 
-  // Score cards — one per unique property type (first occurrence)
-  const seen = new Set();
-  const scorecards = rows.filter(r => {
-    const k = (r.property||r.type||'').toUpperCase();
-    if (seen.has(k)) return false;
-    seen.add(k); return true;
-  }).slice(0,8).map(r => {
-    const pct = ((rmap[r.rating]||2)/3)*100;
-    const col = barColor(r.rating);
-    return `<div class="admet-score-card">
-      <div class="admet-score-label">${r.property||r.type||''}</div>
-      <div class="admet-score-bar-wrap"><div class="admet-score-bar" style="width:${pct}%;background:${col};"></div></div>
-      <div class="admet-score-bottom">
-        <span class="admet-score-val">${r.value||''}</span>
-        <span class="${rc(r.rating)}" style="font-size:10px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span>
-      </div>
+  if (!rows.length) return `
+    <div class="sec-lbl">ADMET Properties</div>
+    <div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL for this compound.</div>`;
+
+  const CAT_ORDER = ['Absorption','Distribution','Metabolism','Excretion','Toxicity'];
+  const groups = {};
+  rows.forEach(r => {
+    const cat = r.assay_category || 'Metabolism';
+    if (!groups[cat]) groups[cat] = [];
+    groups[cat].push(r);
+  });
+  const orderedCats = [
+    ...CAT_ORDER.filter(c => groups[c]),
+    ...Object.keys(groups).filter(c => !CAT_ORDER.includes(c))
+  ];
+
+  const adTabId = `ad-tabs-${i}`;
+  const innerTabsHTML = orderedCats.map((cat, ci) =>
+    `<div class="b-inner-tab${ci===0?' active':''}" onclick="switchBindingTab('${adTabId}',${ci},this)"
+      style="padding:6px 14px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+      letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${ci===0?'var(--blue)':'transparent'};
+      color:${ci===0?'var(--blue)':'var(--ink3)'};white-space:nowrap;transition:all .15s;">
+      ${cat} <span style="font-size:9px;opacity:.7;">(${groups[cat].length})</span>
+    </div>`
+  ).join('');
+
+  const innerPanelsHTML = orderedCats.map((cat, ci) => {
+    const rowsArr = groups[cat].map(r => {
+      const src = r.source || r.reference || '';
+      const sourceBadge = src ? srcBadgeHtml(src) : '';
+      return `<tr>
+        <td style="font-weight:600;color:var(--ink2);font-size:13px;">${r.property||r.type||''}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
+        <td style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,80)}</td>
+        <td style="white-space:nowrap;">${sourceBadge}</td>
+        <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
+      </tr>`;
+    });
+    const paged = paginatedTable(rowsArr, `ad-${i}-${ci}`);
+    const _st = ci===0 ? '' : 'display:none;'; return `<div class="b-inner-panel" data-tabs="${adTabId}" data-idx="${ci}" style="${_st}">
+      <table class="potency-table">
+        <thead><tr><th>Property</th><th>Value</th><th>Assay</th><th>Source</th><th>Rating</th></tr></thead>
+        ${paged.paginated ? paged.body : '<tbody>' + paged.body + '</tbody>'}
+      </table>
+      ${paged.controls}
     </div>`;
   }).join('');
 
-  const admetRowsArr = rows.map(r => {
-    const src = r.source || '';
-    const sourceBadge = src ? srcBadgeHtml(src) : '';
-    return `<tr>
-      <td style="font-weight:600;color:var(--ink2);font-size:13px;">${r.property||r.type||''}</td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
-      <td style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,80)}</td>
-      <td style="white-space:nowrap;">${sourceBadge}</td>
-      <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
-    </tr>`;
-  });
-
-  const admetPaged = paginatedTable(admetRowsArr, 'admet-'+i);
-  const noAdmet = !rows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL for this compound.</div>' : '';
-
   return `
     <div class="sec-lbl">ADMET Properties</div>
-    ${noAdmet}
-    ${rows.length ? `
-    ${scorecards.length ? `<div class="admet-score-grid">${scorecards}</div>` : ''}
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
-      <table class="potency-table">
-        <thead><tr><th>Property</th><th>Value</th><th>Assay</th><th>Source</th><th>Rating</th></tr></thead>
-        ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
-      </table>
-      ${admetPaged.controls}
-    </div>` : ''}`;
-
+      <div id="${adTabId}" style="display:flex;align-items:flex-end;gap:0;padding:0 8px;
+        background:var(--paper2);border-bottom:1px solid var(--paper3);overflow-x:auto;">
+        ${innerTabsHTML}
+      </div>
+      <div>${innerPanelsHTML}</div>
+    </div>`;
 }
 
 function renderNarrative(i, sar) {

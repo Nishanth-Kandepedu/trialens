@@ -12,7 +12,7 @@ BASE = pathlib.Path(__file__).parent
 
 # ── AUTH CONFIG ────────────────────────────────────────────────────────────────
 GUEST_USERNAME = os.environ.get("GUEST_USERNAME", "guest")
-GUEST_PASSWORD = os.environ.get("GUEST_PASSWORD", "drugintelligence2025")
+GUEST_PASSWORD = os.environ.get("GUEST_PASSWORD", "Guest1@")
 
 # In-memory session store: token -> last_activity_timestamp
 SESSIONS = {}
@@ -485,6 +485,20 @@ def fetch_real_sar_data(compound):
                 print(f"[ChEMBL] potency fetch error: {e}", flush=True)
 
             # ADME assays (assay_type=A covers ADME in ChEMBL)
+            # Sub-categorise each entry into Absorption / Distribution / Metabolism / Excretion / Toxicity
+            def admet_subcategory(atype, assay_desc):
+                t = (atype or '').upper()
+                d = (assay_desc or '').lower()
+                if any(x in t for x in ['ABSORPT','PERM','CACO','PAMPA','F%','BIOAVAIL','FA'])                    or any(x in d for x in ['absorption','permeability','caco-2','pampa','oral bioavail','intestinal']):
+                    return 'Absorption'
+                if any(x in t for x in ['VD','VDSS','PPB','FU','LOG D','BLOOD'])                    or any(x in d for x in ['distribution','protein bind','plasma protein','volume of dist','blood-brain','bbb','tissue']):
+                    return 'Distribution'
+                if any(x in t for x in ['CL','CLINT','CLH','CLR','CYP','UGT','METABOL','INTRINSIC','T1/2','HALF','THALF'])                    or any(x in d for x in ['metabol','cyp','ugt','microsom','hepatocyte','intrinsic clearance','half-life','oxidation','glucuronid']):
+                    return 'Metabolism'
+                if any(x in t for x in ['RENAL','EXCRET','AUC','CMAX','TMAX','URINE','BILIARY'])                    or any(x in d for x in ['excretion','renal','urine','biliary','fecal','auc','cmax','tmax','elimination']):
+                    return 'Excretion'
+                return 'Metabolism'  # most common default for assay_type=A
+
             try:
                 adme_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=A&format=json&limit=200"
                 adme_data = http_get(adme_url)
@@ -495,15 +509,16 @@ def fetch_real_sar_data(compound):
                         raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
                         species = norm_species(raw_sp) or species_from_desc(
                             a.get("assay_description"), a.get("target_pref_name"))
+                        desc = (a.get("assay_description") or "")[:80]
                         entry = {
                             "type": atype,
                             "value": val,
                             "unit": a.get("standard_units", ""),
-                            "assay": (a.get("assay_description") or "")[:80],
+                            "assay": desc,
                             "species": species,
                             "reference": a.get("document_chembl_id", ""),
                             "source": "ChEMBL",
-                            "assay_category": "ADME"
+                            "assay_category": admet_subcategory(atype, desc)
                         }
                         result["adme_data"].append(entry)
                         result["bioactivity"].append(entry)
@@ -529,12 +544,13 @@ def fetch_real_sar_data(compound):
                             "species": species,
                             "reference": a.get("document_chembl_id", ""),
                             "source": "ChEMBL",
-                            "assay_category": "toxicity"
+                            "assay_category": "Toxicity"
                         }
                         result["adme_data"].append(entry)
                         result["bioactivity"].append(entry)
             except Exception:
                 pass
+
 
             # In vivo efficacy — assay_type=F filtered to genuine animal model assays
             # Exclude: pure in vitro functional (cell-free, cell-based IC50/EC50/Ki)
