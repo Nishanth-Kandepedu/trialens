@@ -842,6 +842,19 @@ function renderTrialCard(t, i) {
   const cond = Array.isArray(t.conditions) ? t.conditions.join(', ') : (t.conditions||'');
   const condBadge = cond ? `<span class="badge bd-gray">${cond.split(',')[0].trim().slice(0,40)}</span>` : '';
   const enrollStr = t.enrollment ? parseInt(t.enrollment).toLocaleString() + ' participants' : '—';
+
+  // Trim summary to ~3 sentences
+  function trimSummary(text) {
+    if (!text) return '';
+    const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
+    if (sentences.length <= 3) return text;
+    return sentences.slice(0, 3).join(' ').trim() + ' <span style="color:var(--ink4);font-size:11px;">…more</span>';
+  }
+
+  // Primary outcomes only; show count of secondaries
+  const primaryOutcomes = (t.outcomes||[]).filter(o => o.type === 'primary');
+  const secondaryCount = (t.outcomes||[]).filter(o => o.type === 'secondary').length;
+
   return `
   <div class="trial-card" id="trial-${i}">
     <div class="trial-summary" onclick="toggleTrial(${i})">
@@ -868,12 +881,12 @@ function renderTrialCard(t, i) {
         <div class="dg-item"><div class="dg-label">Est. Completion</div><div class="dg-value">${t.completionDate||'—'}</div></div>
       </div>
 
-      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
+      ${t.summary ? `<div class="trial-summary-text">${trimSummary(t.summary)}</div>` : ''}
 
       ${(t.interventions && t.interventions.length) ? `
         <div class="trial-outcome">
           <div class="outcome-label" style="margin-bottom:8px;">Interventions &amp; Dosing</div>
-          ${t.interventions.map(iv => `
+          ${t.interventions.slice(0,4).map(iv => `
             <div style="margin-bottom:8px;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
                 <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;
@@ -882,30 +895,29 @@ function renderTrialCard(t, i) {
               </div>
               ${iv.desc ? `<div style="font-size:12px;color:var(--ink3);padding-left:2px;">${iv.desc}</div>` : ''}
             </div>`).join('')}
+          ${t.interventions.length > 4 ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;">+${t.interventions.length - 4} more — see download for full list</div>` : ''}
         </div>` : ''}
 
-      ${(t.outcomes && t.outcomes.length) ? `
+      ${primaryOutcomes.length ? `
         <div class="trial-outcome">
-          <div class="outcome-label" style="margin-bottom:8px;">Outcomes &amp; Measures</div>
-          ${t.outcomes.map(o => `
+          <div class="outcome-label" style="margin-bottom:8px;">Primary Outcome${primaryOutcomes.length > 1 ? 's' : ''}</div>
+          ${primaryOutcomes.map(o => `
             <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:6px;">
               <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;white-space:nowrap;
-                background:${o.type==='primary'?'var(--blue-bg)':'var(--paper3)'};
-                color:${o.type==='primary'?'var(--blue)':'var(--ink4)'};
-                border:1px solid ${o.type==='primary'?'var(--blue-border)':'var(--paper3)'};
-                font-weight:600;">${o.type==='primary'?'PRIMARY':'SECONDARY'}</span>
+                background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);font-weight:600;">PRIMARY</span>
               <span style="font-size:13px;color:var(--ink2);">${o.measure}${o.timeframe?`<span style="color:var(--ink4);font-size:11px;margin-left:6px;">${o.timeframe}</span>`:''}</span>
             </div>`).join('')}
+          ${secondaryCount ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;margin-top:4px;">${secondaryCount} secondary endpoint${secondaryCount>1?'s':''} — see download for details</div>` : ''}
         </div>` : (t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : '')}
 
-      ${t.eligibility && (t.eligibility.minAge || t.eligibility.sex || t.eligibility.criteria) ? `
+      ${t.eligibility && (t.eligibility.minAge || t.eligibility.sex) ? `
         <div class="trial-outcome">
           <div class="outcome-label" style="margin-bottom:8px;">Eligibility</div>
-          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+          <div style="display:flex;gap:16px;flex-wrap:wrap;">
             ${t.eligibility.sex ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Sex</span> ${t.eligibility.sex}</span>` : ''}
             ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
           </div>
-          ${t.eligibility.criteria ? `<div style="font-size:12px;color:var(--ink3);line-height:1.6;white-space:pre-line;">${t.eligibility.criteria}</div>` : ''}
+          ${t.eligibility.criteria ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;margin-top:6px;">Full eligibility criteria in download ↓</div>` : ''}
         </div>` : ''}
 
       ${t.postedResults ? `
@@ -2590,23 +2602,38 @@ async function renderCompoundStructure(compound) {
     const propData = propRes.ok ? await propRes.json() : null;
     const props = propData?.PropertyTable?.Properties?.[0] || {};
 
-    window._structureCID = cid;
-    window._structureProps = props;
+    // Show spinner immediately — skip PubChem flash entirely
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <div style="border:1px solid var(--paper3);border-radius:12px;background:var(--paper);overflow:hidden;display:flex;align-items:stretch;gap:0;">
+        <div style="padding:20px 28px;background:var(--paper2);border-right:1px solid var(--paper3);display:flex;align-items:center;justify-content:center;min-width:200px;">
+          <div style="width:40px;height:40px;border:3px solid var(--paper3);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
+        </div>
+        <div style="padding:20px 28px;flex:1;display:flex;flex-direction:column;justify-content:center;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;">Compound</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.3px;">${compound}</div>
+          <div style="font-size:11px;color:var(--ink4);margin-top:8px;">Loading structure…</div>
+        </div>
+      </div>`;
 
-    // Show PubChem first (instant)
-    const pubchemUrl = `/api/structure?cid=${cid}`;
-    window._structureImgUrl = pubchemUrl;
-    renderStructurePanel(compound, cid, props, pubchemUrl);
-
-    // Immediately kick off ChEMBL resolve in background — swap image when ready
+    // Kick off ChEMBL resolve — render full panel when ready
     fetch(`/api/resolve-chembl?compound=${encodeURIComponent(compound)}`)
       .then(r => r.ok ? r.json() : null)
       .then(data => {
-        if (data?.chembl_id) {
-          upgradeStructureToChEMBL(data.chembl_id, cid);
-        }
+        const chemblId = data?.chembl_id || '';
+        const imgUrl = chemblId
+          ? `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${cid}`
+          : `/api/structure?cid=${cid}`;
+        window._structureImgUrl = imgUrl;
+        if (chemblId) window._structureChemblId = chemblId;
+        renderStructurePanel(compound, cid, props, imgUrl, chemblId);
       })
-      .catch(() => {});
+      .catch(() => {
+        // Fallback to PubChem only if resolve fails
+        const imgUrl = `/api/structure?cid=${cid}`;
+        window._structureImgUrl = imgUrl;
+        renderStructurePanel(compound, cid, props, imgUrl, '');
+      });
   } catch(e) { /* silent */ }
 }
 
@@ -2632,7 +2659,7 @@ function upgradeStructureToChEMBL(chemblId, cid) {
   }
 }
 
-function renderStructurePanel(compound, cid, props, imgUrl) {
+function renderStructurePanel(compound, cid, props, imgUrl, chemblId) {
   const panel = document.getElementById('compound-structure-panel');
   if (!panel) return;
 
@@ -2656,6 +2683,8 @@ function renderStructurePanel(compound, cid, props, imgUrl) {
         <div class="structure-links" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
           ${cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${cid}" target="_blank"
             style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--blue);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--blue-border);border-radius:4px;background:var(--blue-bg);">PubChem CID ${cid} ↗</a>` : ''}
+          ${chemblId ? `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${chemblId}" target="_blank"
+            style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--green);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--green-border);border-radius:4px;background:var(--green-bg);">${chemblId} ↗</a>` : ''}
         </div>
       </div>
     </div>`;
