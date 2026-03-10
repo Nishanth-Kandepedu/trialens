@@ -418,7 +418,7 @@ def fetch_real_sar_data(compound):
             try:
                 offset = 0
                 page_size = 200
-                max_records = 1000
+                max_records = 500
                 potency_count = 0
                 while potency_count < max_records:
                     act_url = (f"https://www.ebi.ac.uk/chembl/api/data/activity"
@@ -433,7 +433,18 @@ def fetch_real_sar_data(compound):
                     for a in activities:
                         val = a.get("standard_value")
                         if val:
-                            species = (a.get("assay_organism") or a.get("target_organism") or "").strip()
+                            # ChEMBL activity endpoint returns target_organism reliably
+                            species = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                            # Fallback: parse from assay/target description
+                            if not species:
+                                desc = ((a.get("assay_description") or "") + " " + (a.get("target_pref_name") or "")).lower()
+                                if "homo sapiens" in desc or "human" in desc: species = "Homo sapiens"
+                                elif "rattus" in desc or " rat " in desc or desc.startswith("rat "): species = "Rattus norvegicus"
+                                elif "mus musculus" in desc or "mouse" in desc or "murine" in desc: species = "Mus musculus"
+                                elif "macaca" in desc or "monkey" in desc or "primate" in desc: species = "Non-human primate"
+                                elif "canis" in desc or "canine" in desc or " dog " in desc: species = "Canis lupus familiaris"
+                                elif "saccharomyces" in desc or "yeast" in desc: species = "S. cerevisiae"
+                                elif "e. coli" in desc or "escherichia" in desc: species = "E. coli"
                             result["bioactivity"].append({
                                 "type":           a.get("standard_type", ""),
                                 "value":          val,
@@ -464,7 +475,14 @@ def fetch_real_sar_data(compound):
                     val = a.get("standard_value")
                     atype = a.get("standard_type", "")
                     if val and atype:
-                        species = (a.get("assay_organism") or a.get("target_organism") or "").strip()
+                        species = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                        if not species:
+                            desc = ((a.get("assay_description") or "") + " " + (a.get("target_pref_name") or "")).lower()
+                            if "homo sapiens" in desc or "human" in desc: species = "Homo sapiens"
+                            elif "rattus" in desc or " rat " in desc: species = "Rattus norvegicus"
+                            elif "mus musculus" in desc or "mouse" in desc or "murine" in desc: species = "Mus musculus"
+                            elif "macaca" in desc or "monkey" in desc or "primate" in desc: species = "Non-human primate"
+                            elif "canis" in desc or "canine" in desc: species = "Canis lupus familiaris"
                         entry = {
                             "type": atype,
                             "value": val,
@@ -488,7 +506,14 @@ def fetch_real_sar_data(compound):
                     val = a.get("standard_value")
                     atype = a.get("standard_type", "")
                     if val and atype:
-                        species = (a.get("assay_organism") or a.get("target_organism") or "").strip()
+                        species = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                        if not species:
+                            desc = ((a.get("assay_description") or "") + " " + (a.get("target_pref_name") or "")).lower()
+                            if "homo sapiens" in desc or "human" in desc: species = "Homo sapiens"
+                            elif "rattus" in desc or " rat " in desc: species = "Rattus norvegicus"
+                            elif "mus musculus" in desc or "mouse" in desc or "murine" in desc: species = "Mus musculus"
+                            elif "macaca" in desc or "monkey" in desc or "primate" in desc: species = "Non-human primate"
+                            elif "canis" in desc or "canine" in desc: species = "Canis lupus familiaris"
                         entry = {
                             "type": atype,
                             "value": val,

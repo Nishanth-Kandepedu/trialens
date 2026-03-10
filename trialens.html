@@ -997,7 +997,8 @@ async function generateSAR(i) {
     const cleanVal = v => v && !String(v).match(/^\d+[-–]\d+$/) && String(v) !== 'null';
     const potencyLines = potencyData
       .filter(a => cleanVal(a.value))
-      .map(a => `${a.type}=${a.value} ${a.unit} | assay: ${(a.assay||'').substring(0,60)} | ref: ${a.reference||''}`)
+      .slice(0, 30)
+      .map(a => `${a.type}=${a.value} ${a.unit} | assay: ${(a.assay||'').substring(0,60)} | species: ${a.species||''} | ref: ${a.reference||''}`)
       .join('\n') || 'NONE';
     const admeLines = admeData
       .filter(a => cleanVal(a.value))
@@ -1028,7 +1029,53 @@ async function generateSAR(i) {
       `Completion: ${t.completionDate||'N/A'}`,
     ].join('\n');
 
-    setProgress(55, 'Compiling SAR profile with Claude...');
+    // Step 2a: Build potency table directly from raw data — no Claude needed
+    setProgress(55, 'Building potency table...');
+    const parseSpecies = assayStr => {
+      const d = (assayStr || '').toLowerCase();
+      if (d.includes('human'))                              return 'Homo sapiens';
+      if (d.includes('rat') || d.includes('rattus'))       return 'Rattus norvegicus';
+      if (d.includes('mouse') || d.includes('murine'))     return 'Mus musculus';
+      if (d.includes('monkey') || d.includes('primate'))   return 'Non-human primate';
+      if (d.includes('dog') || d.includes('canine'))       return 'Canis lupus familiaris';
+      if (d.includes('rabbit'))                            return 'Oryctolagus cuniculus';
+      return '';
+    };
+    const potencyTableDirect = potencyData
+      .filter(a => cleanVal(a.value))
+      .slice(0, 50)
+      .map(a => ({
+        endpoint:  a.type,
+        value:     a.value,
+        unit:      a.unit,
+        assay:     (a.assay || '').substring(0, 100),
+        species:   a.species || parseSpecies(a.assay),
+        reference: a.reference || a.ref || '',
+        source:    a.source || 'ChEMBL',
+      }));
+
+    // Debug: log first few potency rows to verify reference field
+    console.log('[SAR] potencyData sample:', potencyData.slice(0,3).map(a=>({type:a.type,ref:a.reference,species:a.species,assay:(a.assay||'').slice(0,40)})));
+    // Step 2b: Render tabs immediately with raw data while Claude works
+    const partialSar = {
+      potency_table: potencyTableDirect,
+      admet: [],
+      dose_response: [],
+      physicochemical: realData.physicochemical || null,
+      summary: '<span style="color:var(--ink3);font-style:italic;">Generating narrative…</span>',
+      sources: realData.sources || [],
+      _realData: realData,
+      _sources: realData.sources || []
+    };
+    sarCache[i] = partialSar;
+    renderSARResults(i, partialSar);
+    progressEl.classList.remove('active');
+    btn.disabled = false;
+
+    // Step 2c: Call Claude for dose-response, ADMET interpretation and narrative only
+    setProgress(70, 'Generating SAR narrative...');
+    progressEl.classList.add('active');
+    btn.disabled = true;
 
     const hasPotency = potencyLines !== 'NONE';
     const hasAdme = admeLines !== 'NONE';
@@ -1056,16 +1103,6 @@ ${clinicalContext}
 
 Return a JSON object with these exact keys:
 
-"potency_table": Array of objects from POTENCY DATA only. Each object: {endpoint, value, unit, assay, ref, source}
-- endpoint: the measurement type (IC50, Ki, etc.)
-- value: EXACT single numeric value only — NEVER a range like "100-200", pick the most representative single value
-- unit: nM, uM, % etc. exactly as given
-- assay: short assay description from the data
-- ref: the exact ChEMBL document ID from the "ref:" field in the data (e.g. CHEMBL2040800)
-- source: "ChEMBL ${realData.chembl_id||''}"
-- Include at most 8 rows — pick the most pharmacologically relevant endpoints
-- If POTENCY DATA is NONE → return []
-
 "dose_response": Array of 3-4 objects for this specific trial. Each: {dose, response_rate, toxicity_grade, notes}
 - dose: realistic dose string for this compound/phase/condition (e.g. "400 mg QD")
 - response_rate: integer 0-100 estimated from trial outcome language and phase
@@ -1082,8 +1119,6 @@ Return a JSON object with these exact keys:
 - If ADME/TOX DATA is NONE → return []
 - DO NOT include physicochemical properties (MW, LogP, TPSA) in this array
 
-"physicochemical": ${hasPhys ? `Object with these exact keys from the PubChem data: {mw, logp, tpsa, hbd, hba, rot_bonds} — fill from PHYSICOCHEMICAL data above` : 'null'}
-
 "summary": 3-sentence narrative covering: (1) what potency/ADME data was found and key values, (2) clinical context interpretation, (3) what data gaps exist. Be specific about values found or absent.
 
 "sources": Array of source strings actually used, e.g. ["ChEMBL ${realData.chembl_id||''}", "PubChem CID ${pcid}", "ClinicalTrials.gov NCT${t.nctId||''}"]
@@ -1093,6 +1128,9 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     );
 
     setProgress(90, 'Rendering results...');
+    // Use our directly-built data — don't trust Claude's copies
+    sar.potency_table = potencyTableDirect;
+    sar.physicochemical = realData.physicochemical || null;
     sar._realData = realData;
     sar._sources = sar.sources || (realData.sources || []);
     sarCache[i] = sar;
@@ -1150,12 +1188,13 @@ function srcBadgeHtml(src) {
   const sc = isChEMBL ? 'var(--blue)' : isPubChem ? 'var(--green)' : 'var(--ink3)';
   const bg = isChEMBL ? 'var(--blue-bg)' : isPubChem ? 'var(--green-bg)' : 'var(--paper2)';
   const br = isChEMBL ? 'var(--blue-border)' : isPubChem ? 'var(--green-border)' : 'var(--paper3)';
-  const label = isChEMBL ? 'ChEMBL' : isPubChem ? 'PubChem' : s;
-  // Link to doc ref if it looks like a ChEMBL doc ID
+  // ChEMBL doc ref (7+ digit number after CHEMBL) — show as clickable badge
   const chemblDoc = s.match(/^(CHEMBL\d+)$/i);
   if (chemblDoc) {
     return `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${s.toUpperCase()}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 8px;border-radius:3px;background:${bg};color:${sc};border:1px solid ${br};font-weight:600;white-space:nowrap;text-decoration:none;">${s.toUpperCase()} ↗</a>`;
   }
+  // Plain source label
+  const label = isChEMBL ? 'ChEMBL' : isPubChem ? 'PubChem' : s;
   return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 8px;border-radius:3px;background:${bg};color:${sc};border:1px solid ${br};font-weight:600;white-space:nowrap;">${label}</span>`;
 }
 
@@ -1229,16 +1268,16 @@ function renderPotency(i, sar) {
     .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
     .map(r => {
       const docRef = r.reference || r.ref || '';
-      const docLink = docRef && /^CHEMBL/i.test(docRef)
-        ? ` <a href="https://www.ebi.ac.uk/chembl/document_report_card/${docRef}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--blue);text-decoration:none;">${docRef} ↗</a>`
-        : '';
+      const sourceBadge = docRef && /^CHEMBL/i.test(docRef)
+        ? srcBadgeHtml(docRef)
+        : srcBadgeHtml(r.source);
       return `<tr>
         <td class="p-endpoint">${r.endpoint||''}</td>
         <td class="p-value">${r.value||''}</td>
         <td class="p-unit">${r.unit||''}</td>
-        <td class="p-assay" style="font-size:12px;">${r.assay||''}${docLink}</td>
-        <td style="font-size:11px;color:var(--ink3);font-style:italic;">${r.species||r.bio_source||'—'}</td>
-        <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
+        <td class="p-assay" style="font-size:12px;">${r.assay||''}</td>
+        <td style="font-size:11px;color:var(--ink3);font-style:italic;">${r.species||'—'}</td>
+        <td style="white-space:nowrap;">${sourceBadge}</td>
       </tr>`;
     });  // Keep as array for pagination
 
