@@ -2183,6 +2183,7 @@ function deleteReport(i) {
   showToast('Report deleted.');
 }
 
+// v2.1 - html export
 function downloadCompoundSAR() {
   const sar = compoundSarCache;
   if (!sar) { showToast('No SAR profile generated yet.'); return; }
