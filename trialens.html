@@ -605,7 +605,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
     </div>
     <div class="about-card">
       <div class="about-card-title ac-violet">SAR Outputs</div>
-      <p><b>Binding Data</b> — Real IC50/EC50/Ki/Kd values from ChEMBL, supplemented with published literature citations.<br><br><b>Dose-Response</b> — AI-synthesised cohort response rates and toxicity grades based on clinical trial context.<br><br><b>ADMET</b> — Physicochemical properties from PubChem (MW, LogP, TPSA) with AI-interpreted bioavailability, half-life, CYP, hERG, and BBB ratings citing published PK studies.<br><br><b>SAR Narrative</b> — AI-generated pharmacology summary grounded in real database values and literature.</p>
+      <p><b>In Vitro Bioactivity</b> — Real IC50/EC50/Ki/Kd values from ChEMBL, supplemented with published literature citations.<br><br><b>Dose-Response</b> — AI-synthesised cohort response rates and toxicity grades based on clinical trial context.<br><br><b>ADMET</b> — Physicochemical properties from PubChem (MW, LogP, TPSA) with AI-interpreted bioavailability, half-life, CYP, hERG, and BBB ratings citing published PK studies.<br><br><b>SAR Narrative</b> — AI-generated pharmacology summary grounded in real database values and literature.</p>
     </div>
     <div class="about-card">
       <div class="about-card-title ac-gold">Disclaimer</div>
@@ -1026,7 +1026,7 @@ async function generateSAR(i) {
     ].join('\n');
 
     // Step 2a: Build potency table directly from raw data — no Claude needed
-    setProgress(55, 'Building potency table...');
+    setProgress(55, 'Building in vitro table...');
     const parseSpecies = assayStr => {
       const d = (assayStr || '').toLowerCase();
       if (d.includes('human') || d.includes('homo sapiens')) return 'Human';
@@ -1152,7 +1152,7 @@ function renderSARResults(i, sar) {
       · Verify against primary literature
     </div>
     <div class="sar-tabs">
-      <div class="sar-tab active" onclick="switchTab(${i},'potency',this)">Binding</div>
+      <div class="sar-tab active" onclick="switchTab(${i},'potency',this)">In Vitro</div>
       <div class="sar-tab" onclick="switchTab(${i},'invivo',this)">In Vivo</div>
       <div class="sar-tab" onclick="switchTab(${i},'dose',this)">Dose-Response</div>
       <div class="sar-tab" onclick="switchTab(${i},'admet',this)">ADMET</div>
@@ -1331,7 +1331,7 @@ function renderPotency(i, sar) {
   </div>` : '';
 
   return `
-    <div class="sec-lbl">Binding Data</div>
+    <div class="sec-lbl">In Vitro Bioactivity</div>
     ${noPotency}
     ${validRows.length ? `
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
@@ -1983,7 +1983,7 @@ function downloadTrial(i) {
   if (sar) {
     // Potency table
     const potRows = (sar.potency_table||[]).map(r=>[r.endpoint||'', `<strong>${r.value||''}</strong>`, r.unit||'', `<span style="color:#b5b0a8;">${r.assay||''}</span>`]);
-    sarHTML += section('Binding Data', '#2a5f9e', tableHTML(['Endpoint','Value','Unit','Assay'], potRows));
+    sarHTML += section('In Vitro Binding', '#2a5f9e', tableHTML(['Endpoint','Value','Unit','Assay'], potRows));
 
     // Dose-response table
     const drRows = (sar.dose_response||[]).map(r=>[
