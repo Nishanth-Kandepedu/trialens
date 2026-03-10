@@ -905,7 +905,7 @@ function renderTrialCard(t, i) {
             ${t.eligibility.sex ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Sex</span> ${t.eligibility.sex}</span>` : ''}
             ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
           </div>
-          ${t.eligibility.criteria ? `<div style="font-size:12px;color:var(--ink3);line-height:1.6;white-space:pre-line;">${t.eligibility.criteria.substring(0,400)}${t.eligibility.criteria.length>400?'…':''}</div>` : ''}
+          ${t.eligibility.criteria ? `<div style="font-size:12px;color:var(--ink3);line-height:1.6;white-space:pre-line;">${t.eligibility.criteria}</div>` : ''}
         </div>` : ''}
 
       ${t.postedResults ? `
@@ -2467,7 +2467,7 @@ function buildAndDownloadTrial(t, nct, cond, enroll, date, structureB64) {
         ${t.eligibility.sex ? `<span style="font-size:12px;color:#222;"><span style="color:#888;">Sex</span> ${t.eligibility.sex}</span>` : ''}
         ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:#222;"><span style="color:#888;">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
       </div>
-      ${t.eligibility.criteria ? `<div style="font-size:12px;color:#555;line-height:1.65;white-space:pre-line;">${t.eligibility.criteria.substring(0,400)}${t.eligibility.criteria.length>400?'…':''}</div>` : ''}
+      ${t.eligibility.criteria ? `<div style="font-size:12px;color:#555;line-height:1.65;white-space:pre-line;">${t.eligibility.criteria}</div>` : ''}
     </div>` : '';
 
   // Posted Results
@@ -2593,19 +2593,30 @@ async function renderCompoundStructure(compound) {
     window._structureCID = cid;
     window._structureProps = props;
 
-    // Show PubChem image immediately (fast)
+    // Show PubChem first (instant)
     const pubchemUrl = `/api/structure?cid=${cid}`;
     window._structureImgUrl = pubchemUrl;
     renderStructurePanel(compound, cid, props, pubchemUrl);
+
+    // Immediately kick off ChEMBL resolve in background — swap image when ready
+    fetch(`/api/resolve-chembl?compound=${encodeURIComponent(compound)}`)
+      .then(r => r.ok ? r.json() : null)
+      .then(data => {
+        if (data?.chembl_id) {
+          upgradeStructureToChEMBL(data.chembl_id, cid);
+        }
+      })
+      .catch(() => {});
   } catch(e) { /* silent */ }
 }
 
-// Called after SAR generates — upgrades image to clean ChEMBL white-background structure
-function upgradeStructureToChEMBL(chemblId) {
-  if (!chemblId || !window._structureCID) return;
+// Upgrade structure panel image to ChEMBL clean white-background structure
+function upgradeStructureToChEMBL(chemblId, cid) {
+  if (!chemblId) return;
   const img = document.querySelector('#compound-structure-panel img');
   if (!img) return;
-  const chemblUrl = `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${window._structureCID}`;
+  const useCid = cid || window._structureCID || '';
+  const chemblUrl = `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${useCid}`;
   window._structureImgUrl = chemblUrl;
   img.src = chemblUrl;
   // Add ChEMBL link to panel if not already there

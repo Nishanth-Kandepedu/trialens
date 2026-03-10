@@ -177,8 +177,8 @@ def fetch_trials(compound):
             t = re.sub(r'\r\n|\r', '\n', t)
             t = re.sub(r'\n{3,}', '\n\n', t)
             return t[:maxlen] + ('…' if len(t) > maxlen else '')
-        brief_summary = clean_nct_text(desc.get("briefSummary", ""))
-        detailed_desc = clean_nct_text(desc.get("detailedDescription", ""), 800)
+        brief_summary = clean_nct_text(desc.get("briefSummary", ""), 4000)
+        detailed_desc = clean_nct_text(desc.get("detailedDescription", ""), 4000)
         summary = brief_summary or detailed_desc
         sponsor  = p.get("sponsorCollaboratorsModule", {})
         conds    = p.get("conditionsModule", {})
@@ -229,7 +229,7 @@ def fetch_trials(compound):
             "minAge":   clean_age(elig.get("minimumAge","")),
             "maxAge":   clean_age(elig.get("maximumAge","")),
             "sex":      str(elig.get("sex","")).strip()[:20],
-            "criteria": clean_nct_text(elig.get("eligibilityCriteria") or "", 600),
+            "criteria": clean_nct_text(elig.get("eligibilityCriteria") or "", 4000),
         }
 
         # Posted results — if available
@@ -783,6 +783,24 @@ class Handler(BaseHTTPRequestHandler):
             self.send_header("Content-Length", str(len(login_bytes)))
             self.end_headers()
             self.wfile.write(login_bytes)
+            return
+
+        if path == "/api/resolve-chembl":
+            qs = urlparse(self.path).query
+            params = urllib.parse.parse_qs(qs)
+            compound_name = (params.get("compound", [None])[0] or "").strip()
+            chembl_id = ""
+            if compound_name:
+                try:
+                    chembl_id, _ = resolve_chembl_id(compound_name)
+                except Exception as e:
+                    print(f"[resolve-chembl] error: {e}", flush=True)
+            result = json.dumps({"chembl_id": chembl_id}).encode()
+            self.send_response(200)
+            self.send_header("Content-Type", "application/json")
+            self.send_header("Content-Length", str(len(result)))
+            self.end_headers()
+            self.wfile.write(result)
             return
 
         if path == "/api/structure":
