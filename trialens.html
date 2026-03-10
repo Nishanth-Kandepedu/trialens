@@ -865,6 +865,21 @@ function renderTrialCard(t, i) {
         <div class="dg-item"><div class="dg-label">Start Date</div><div class="dg-value">${t.startDate||'—'}</div></div>
         <div class="dg-item"><div class="dg-label">Est. Completion</div><div class="dg-value">${t.completionDate||'—'}</div></div>
       </div>
+
+      ${(t.interventions && t.interventions.length) ? `
+        <div class="trial-outcome">
+          <div class="outcome-label" style="margin-bottom:8px;">Interventions &amp; Dosing</div>
+          ${t.interventions.map(iv => `
+            <div style="margin-bottom:8px;">
+              <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+                <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;
+                  background:var(--gold-bg);color:var(--gold);border:1px solid var(--gold-border);font-weight:600;white-space:nowrap;">${iv.type||'DRUG'}</span>
+                <span style="font-size:13px;font-weight:600;color:var(--ink);">${iv.name}</span>
+              </div>
+              ${iv.desc ? `<div style="font-size:12px;color:var(--ink3);padding-left:2px;">${iv.desc}</div>` : ''}
+            </div>`).join('')}
+        </div>` : ''}
+
       ${(t.outcomes && t.outcomes.length) ? `
         <div class="trial-outcome">
           <div class="outcome-label" style="margin-bottom:8px;">Outcomes &amp; Measures</div>
@@ -875,26 +890,37 @@ function renderTrialCard(t, i) {
                 color:${o.type==='primary'?'var(--blue)':'var(--ink4)'};
                 border:1px solid ${o.type==='primary'?'var(--blue-border)':'var(--paper3)'};
                 font-weight:600;">${o.type==='primary'?'PRIMARY':'SECONDARY'}</span>
-              <span style="font-size:13px;color:var(--ink2);">${o.measure}${o.timeframe ? `<span style="color:var(--ink4);font-size:11px;margin-left:6px;">${o.timeframe}</span>` : ''}</span>
+              <span style="font-size:13px;color:var(--ink2);">${o.measure}${o.timeframe?`<span style="color:var(--ink4);font-size:11px;margin-left:6px;">${o.timeframe}</span>`:''}</span>
             </div>`).join('')}
         </div>` : (t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : '')}
-      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
-      <div class="sar-section" id="sar-section-${i}">
-        <div class="sar-trigger">
-          <button class="btn-generate" onclick="generateSAR(${i})" id="gen-btn-${i}">
-            Generate SAR Profile
-          </button>
-          <span class="sar-hint">Potency, ADME &amp; dose-response for this trial</span>
-        </div>
-        <div class="sar-progress" id="sar-progress-${i}">
-          <div class="loader-wrap">
-            <div class="loader-spinner"></div>
-            <div class="loader-step-label" id="prog-label-${i}">Initialising…</div>
-            <div class="loader-bar-track"><div class="loader-bar-fill" id="prog-bar-${i}" style="width:0%"></div></div>
+
+      ${t.eligibility && (t.eligibility.minAge || t.eligibility.sex || t.eligibility.criteria) ? `
+        <div class="trial-outcome">
+          <div class="outcome-label" style="margin-bottom:8px;">Eligibility</div>
+          <div style="display:flex;gap:16px;flex-wrap:wrap;margin-bottom:8px;">
+            ${t.eligibility.sex ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Sex</span> ${t.eligibility.sex}</span>` : ''}
+            ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
           </div>
-        </div>
-        <div class="sar-results" id="sar-results-${i}"></div>
-      </div>
+          ${t.eligibility.criteria ? `<div style="font-size:12px;color:var(--ink3);line-height:1.6;white-space:pre-line;">${t.eligibility.criteria.substring(0,400)}${t.eligibility.criteria.length>400?'…':''}</div>` : ''}
+        </div>` : ''}
+
+      ${t.postedResults ? `
+        <div class="trial-outcome">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:8px;">
+            <div class="outcome-label">Posted Results</div>
+            <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 7px;border-radius:3px;
+              background:var(--green-bg);color:var(--green);border:1px solid var(--green-border);font-weight:600;">RESULTS AVAILABLE</span>
+          </div>
+          ${t.postedResults.measures && t.postedResults.measures.length ? t.postedResults.measures.map(m=>`
+            <div style="font-size:12px;color:var(--ink2);margin-bottom:4px;">
+              <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--ink4);text-transform:uppercase;margin-right:6px;">${m.type}</span>${m.title}
+            </div>`).join('') : ''}
+          <a href="https://clinicaltrials.gov/study/${t.nctId}#results" target="_blank"
+            style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--blue);text-decoration:none;font-weight:600;margin-top:6px;display:inline-block;">
+            View full results on ClinicalTrials.gov ↗</a>
+        </div>` : ''}
+
+      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
     </div>
   </div>`;
 }
@@ -1132,6 +1158,10 @@ Return ONLY valid JSON.`,
           <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap;">
             ${realData.chembl_id ? `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${realData.chembl_id}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--blue);text-decoration:none;font-weight:600;">ChEMBL ${realData.chembl_id} ↗</a>` : ''}
             ${realData.pubchem_cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${realData.pubchem_cid}" target="_blank" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--green);text-decoration:none;font-weight:600;">PubChem ${realData.pubchem_cid} ↗</a>` : ''}
+            <button class="btn-ghost" onclick="downloadCompoundSAR()" style="font-size:11px;padding:6px 14px;">
+              <svg width="11" height="11" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4"/><polyline points="7,10 12,15 17,10"/><line x1="12" y1="15" x2="12" y2="3"/></svg>
+              Download SAR
+            </button>
           </div>
         </div>
         <div class="sar-tabs" style="padding:0 20px;">
@@ -2151,6 +2181,64 @@ function deleteReport(i) {
   localStorage.setItem('tl-saved', JSON.stringify(savedReports));
   renderSaved();
   showToast('Report deleted.');
+}
+
+function downloadCompoundSAR() {
+  const sar = compoundSarCache;
+  if (!sar) { showToast('No SAR profile generated yet.'); return; }
+  const rd = sar._realData || {};
+  const date = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
+  const lines = [];
+
+  lines.push(`COMPOUND SAR PROFILE — ${currentCompound}`);
+  lines.push(`Generated: ${date} | Drug Intelligence`);
+  lines.push(`ChEMBL: ${rd.chembl_id||'N/A'} | PubChem CID: ${rd.pubchem_cid||'N/A'}`);
+  lines.push('='.repeat(60));
+
+  // Physicochemical
+  const pc = sar.physicochemical || {};
+  if (pc.molecular_weight) {
+    lines.push('\nPHYSICOCHEMICAL');
+    lines.push(`MW: ${pc.molecular_weight} Da | LogP: ${pc.logp??'N/A'} | TPSA: ${pc.tpsa??'N/A'} Å²`);
+    lines.push(`HBD: ${pc.hbd??'N/A'} | HBA: ${pc.hba??'N/A'} | RotBonds: ${pc.rotatable_bonds??'N/A'}`);
+  }
+
+  // In Vitro
+  if (sar.potency_table && sar.potency_table.length) {
+    lines.push('\nIN VITRO BIOACTIVITY');
+    lines.push(['Endpoint','Value','Unit','Assay','Source'].join('\t'));
+    sar.potency_table.forEach(r => lines.push([r.endpoint,r.value,r.unit,(r.assay||'').slice(0,60),r.source].join('\t')));
+  }
+
+  // ADMET
+  if (sar.admet && sar.admet.length) {
+    lines.push('\nADMET');
+    lines.push(['Property','Value','Unit','Category','Rating'].join('\t'));
+    sar.admet.forEach(r => lines.push([r.property||r.type,r.value,r.unit||'',r.assay_category||'',r.rating].join('\t')));
+  }
+
+  // In Vivo
+  const ivRows = (rd.invivo_data||[]).filter(r=>r.value);
+  if (ivRows.length) {
+    lines.push('\nIN VIVO EFFICACY');
+    lines.push(['Type','Value','Unit','Species','Assay'].join('\t'));
+    ivRows.forEach(r => lines.push([r.type,r.value,r.unit||'',r.species||'',(r.assay||'').slice(0,60)].join('\t')));
+  }
+
+  // Narrative
+  if (sar.summary) {
+    lines.push('\nSAR NARRATIVE');
+    lines.push(sar.summary);
+  }
+
+  lines.push('\n' + '-'.repeat(60));
+  lines.push('Source: ChEMBL, PubChem | Verify against primary literature');
+
+  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob);
+  a.download = `SAR_${currentCompound.replace(/\s+/g,'_')}_${date.replace(/ /g,'')}.txt`;
+  a.click();
 }
 
 function downloadNarrative(i) {

@@ -185,6 +185,42 @@ def fetch_trials(compound):
             m = o.get("measure","").strip()
             tf = o.get("timeFrame","").strip()
             if m: all_outcomes.append({"type":"secondary","measure":m,"timeframe":tf})
+
+        # Interventions — dose, route, arm descriptions
+        arms_module = p.get("armsInterventionsModule", {})
+        interventions = []
+        for iv in arms_module.get("interventions", [])[:4]:
+            desc = iv.get("description","").strip()
+            interventions.append({
+                "name":  iv.get("name","").strip(),
+                "type":  iv.get("type","").strip(),
+                "desc":  desc[:200] if desc else "",
+            })
+
+        # Eligibility — age, sex, key criteria
+        elig = p.get("eligibilityModule", {})
+        eligibility = {
+            "minAge":   elig.get("minimumAge",""),
+            "maxAge":   elig.get("maximumAge",""),
+            "sex":      elig.get("sex",""),
+            "criteria": elig.get("eligibilityCriteria","")[:600] if elig.get("eligibilityCriteria") else "",
+        }
+
+        # Posted results — if available
+        results_section = study.get("resultsSection", {})
+        posted_results = None
+        if results_section:
+            outcome_measures = results_section.get("outcomeMeasuresModule", {}).get("outcomeMeasures", [])
+            baseline = results_section.get("baselineCharacteristicsModule", {})
+            adverse  = results_section.get("adverseEventsModule", {})
+            if outcome_measures or baseline or adverse:
+                posted_results = {
+                    "hasResults": True,
+                    "measures": [{"title": om.get("title",""), "type": om.get("type","")}
+                                 for om in outcome_measures[:4]],
+                    "totalAE": adverse.get("totalNumberOfParticipants",""),
+                }
+
         trials.append({
             "nctId":        ident.get("nctId",""),
             "title":        ident.get("briefTitle",""),
@@ -196,8 +232,11 @@ def fetch_trials(compound):
             "startDate":    status.get("startDateStruct",{}).get("date",""),
             "completionDate": status.get("primaryCompletionDateStruct",{}).get("date",""),
             "summary":      desc.get("briefSummary",""),
-            "primaryOutcome": primary_outcome,
-            "outcomes":       all_outcomes,
+            "primaryOutcome":  primary_outcome,
+            "outcomes":        all_outcomes,
+            "interventions":   interventions,
+            "eligibility":     eligibility,
+            "postedResults":   posted_results,
             "source":       "ClinicalTrials.gov",
         })
     return trials, total_count
