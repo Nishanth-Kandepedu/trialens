@@ -2188,56 +2188,149 @@ function downloadCompoundSAR() {
   if (!sar) { showToast('No SAR profile generated yet.'); return; }
   const rd = sar._realData || {};
   const date = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
-  const lines = [];
-
-  lines.push(`COMPOUND SAR PROFILE — ${currentCompound}`);
-  lines.push(`Generated: ${date} | Drug Intelligence`);
-  lines.push(`ChEMBL: ${rd.chembl_id||'N/A'} | PubChem CID: ${rd.pubchem_cid||'N/A'}`);
-  lines.push('='.repeat(60));
-
-  // Physicochemical
   const pc = sar.physicochemical || {};
-  if (pc.molecular_weight) {
-    lines.push('\nPHYSICOCHEMICAL');
-    lines.push(`MW: ${pc.molecular_weight} Da | LogP: ${pc.logp??'N/A'} | TPSA: ${pc.tpsa??'N/A'} Å²`);
-    lines.push(`HBD: ${pc.hbd??'N/A'} | HBA: ${pc.hba??'N/A'} | RotBonds: ${pc.rotatable_bonds??'N/A'}`);
-  }
 
-  // In Vitro
-  if (sar.potency_table && sar.potency_table.length) {
-    lines.push('\nIN VITRO BIOACTIVITY');
-    lines.push(['Endpoint','Value','Unit','Assay','Source'].join('\t'));
-    sar.potency_table.forEach(r => lines.push([r.endpoint,r.value,r.unit,(r.assay||'').slice(0,60),r.source].join('\t')));
-  }
+  const tableStyle = `width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;`;
+  const thStyle = `padding:7px 12px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#888;background:#f5f5f5;border-bottom:1px solid #e8e8e8;font-weight:500;`;
+  const tdStyle = `padding:9px 12px;border-bottom:1px solid #f0f0f0;color:#222;vertical-align:middle;`;
+  const secStyle = `margin-bottom:32px;`;
+  const secLbl = `font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#888;padding-bottom:8px;border-bottom:1px solid #e8e8e8;margin-bottom:14px;`;
 
-  // ADMET
-  if (sar.admet && sar.admet.length) {
-    lines.push('\nADMET');
-    lines.push(['Property','Value','Unit','Category','Rating'].join('\t'));
-    sar.admet.forEach(r => lines.push([r.property||r.type,r.value,r.unit||'',r.assay_category||'',r.rating].join('\t')));
-  }
+  const badge = (text, color) => `<span style="font-family:'IBM Plex Mono',monospace;font-size:9px;padding:2px 8px;border-radius:3px;background:${color}18;color:${color};border:1px solid ${color}30;font-weight:600;white-space:nowrap;">${text}</span>`;
 
-  // In Vivo
+  const ratingColor = r => r==='good'?'#1a7a4a':r==='poor'?'#c0392b':'#b87c1a';
+  const ratingIcon  = r => r==='good'?'▲':r==='poor'?'▼':'●';
+
+  // Physicochemical pills
+  const pcHtml = pc.molecular_weight ? `
+    <div style="display:flex;flex-wrap:wrap;gap:8px;margin-top:10px;">
+      ${[['MW', pc.molecular_weight+' Da'],['LogP',pc.logp??'N/A'],['TPSA',(pc.tpsa??'N/A')+' Å²'],
+         ['HBD',pc.hbd??'N/A'],['HBA',pc.hba??'N/A'],['RotBonds',pc.rotatable_bonds??'N/A']]
+        .map(([k,v])=>`<div style="padding:6px 12px;background:#f5f5f5;border-radius:6px;border:1px solid #e8e8e8;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#888;letter-spacing:.5px;text-transform:uppercase;">${k}</div>
+          <div style="font-size:13px;font-weight:600;color:#0a0a0a;margin-top:2px;">${v}</div>
+        </div>`).join('')}
+    </div>` : '<p style="color:#888;font-size:12px;">Not available</p>';
+
+  // In Vitro table
+  const inVitroHtml = (sar.potency_table||[]).length ? `
+    <table style="${tableStyle}">
+      <thead><tr>${['Endpoint','Value','Unit','Assay','Source'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead>
+      <tbody>${sar.potency_table.map(r=>`<tr>
+        <td style="${tdStyle}font-weight:600;">${r.endpoint||''}</td>
+        <td style="${tdStyle}font-family:'IBM Plex Mono',monospace;font-weight:700;">${r.value||''}</td>
+        <td style="${tdStyle}color:#888;">${r.unit||''}</td>
+        <td style="${tdStyle}font-size:11px;color:#555;">${(r.assay||'').slice(0,80)}</td>
+        <td style="${tdStyle}">${badge(r.source||'ChEMBL','#1a5eb5')}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<p style="color:#888;font-size:12px;">No in vitro data found</p>';
+
+  // ADMET grouped by category
+  const admetRows = sar.admet||[];
+  const admetHtml = admetRows.length ? `
+    <table style="${tableStyle}">
+      <thead><tr>${['Category','Property','Value','Rating'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead>
+      <tbody>${admetRows.map(r=>{
+        const col = ratingColor(r.rating); const ic = ratingIcon(r.rating);
+        return `<tr>
+          <td style="${tdStyle}font-size:10px;color:#888;font-family:'IBM Plex Mono',monospace;">${r.assay_category||''}</td>
+          <td style="${tdStyle}font-weight:600;">${r.property||r.type||''}</td>
+          <td style="${tdStyle}font-family:'IBM Plex Mono',monospace;">${r.value||''} <span style="color:#888;font-size:10px;">${r.unit||''}</span></td>
+          <td style="${tdStyle}"><span style="color:${col};font-size:11px;font-weight:600;">${ic} ${(r.rating||'').toUpperCase()}</span></td>
+        </tr>`;}).join('')}</tbody>
+    </table>` : '<p style="color:#888;font-size:12px;">No ADMET data found</p>';
+
+  // In Vivo table
   const ivRows = (rd.invivo_data||[]).filter(r=>r.value);
-  if (ivRows.length) {
-    lines.push('\nIN VIVO EFFICACY');
-    lines.push(['Type','Value','Unit','Species','Assay'].join('\t'));
-    ivRows.forEach(r => lines.push([r.type,r.value,r.unit||'',r.species||'',(r.assay||'').slice(0,60)].join('\t')));
-  }
+  const inVivoHtml = ivRows.length ? `
+    <table style="${tableStyle}">
+      <thead><tr>${['Type','Value','Unit','Species','Assay'].map(h=>`<th style="${thStyle}">${h}</th>`).join('')}</tr></thead>
+      <tbody>${ivRows.map(r=>`<tr>
+        <td style="${tdStyle}font-weight:600;">${r.type||''}</td>
+        <td style="${tdStyle}font-family:'IBM Plex Mono',monospace;font-weight:700;">${r.value||''}</td>
+        <td style="${tdStyle}color:#888;">${r.unit||''}</td>
+        <td style="${tdStyle}">${r.species ? badge(r.species,'#1a7a4a') : '—'}</td>
+        <td style="${tdStyle}font-size:11px;color:#555;">${(r.assay||'').slice(0,80)}</td>
+      </tr>`).join('')}</tbody>
+    </table>` : '<p style="color:#888;font-size:12px;">No in vivo data found</p>';
 
-  // Narrative
-  if (sar.summary) {
-    lines.push('\nSAR NARRATIVE');
-    lines.push(sar.summary);
-  }
+  const html = `<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>SAR Profile — ${currentCompound}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  *{box-sizing:border-box;margin:0;padding:0;}
+  body{font-family:'Inter',sans-serif;font-size:13.5px;color:#0a0a0a;background:#fff;-webkit-font-smoothing:antialiased;}
+  @media print{body{font-size:11px;} .no-print{display:none;}}
+</style>
+</head>
+<body>
+<div style="max-width:900px;margin:0 auto;padding:48px 40px;">
 
-  lines.push('\n' + '-'.repeat(60));
-  lines.push('Source: ChEMBL, PubChem | Verify against primary literature');
+  <!-- Header -->
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #0a0a0a;">
+    <div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#888;margin-bottom:8px;">SAR Intelligence Report</div>
+      <div style="font-size:28px;font-weight:700;letter-spacing:-.5px;color:#0a0a0a;">${currentCompound}</div>
+      <div style="margin-top:10px;display:flex;gap:10px;flex-wrap:wrap;">
+        ${rd.chembl_id ? `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${rd.chembl_id}" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#1a5eb5;text-decoration:none;font-weight:600;">ChEMBL ${rd.chembl_id} ↗</a>` : ''}
+        ${rd.pubchem_cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${rd.pubchem_cid}" style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#1a7a4a;text-decoration:none;font-weight:600;">PubChem CID ${rd.pubchem_cid} ↗</a>` : ''}
+      </div>
+    </div>
+    <div style="text-align:right;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#888;">Drug Intelligence</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#888;margin-top:2px;">${date}</div>
+      <button class="no-print" onclick="window.print()" style="margin-top:10px;padding:6px 14px;background:#0a0a0a;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">Print / Save PDF</button>
+    </div>
+  </div>
 
-  const blob = new Blob([lines.join('\n')], {type:'text/plain'});
+  <!-- Physicochemical -->
+  <div style="${secStyle}">
+    <div style="${secLbl}">Physicochemical Properties</div>
+    ${pcHtml}
+  </div>
+
+  <!-- SAR Narrative -->
+  ${sar.summary ? `<div style="${secStyle}">
+    <div style="${secLbl}">SAR Narrative</div>
+    <div style="font-size:14px;line-height:1.75;color:#222;padding:18px 20px;background:#f5f5f5;border-radius:8px;border-left:3px solid #0a0a0a;">${sar.summary}</div>
+  </div>` : ''}
+
+  <!-- In Vitro -->
+  <div style="${secStyle}">
+    <div style="${secLbl}">In Vitro Bioactivity</div>
+    ${inVitroHtml}
+  </div>
+
+  <!-- In Vivo -->
+  <div style="${secStyle}">
+    <div style="${secLbl}">In Vivo Efficacy</div>
+    ${inVivoHtml}
+  </div>
+
+  <!-- ADMET -->
+  <div style="${secStyle}">
+    <div style="${secLbl}">ADMET Properties</div>
+    ${admetHtml}
+  </div>
+
+  <!-- Footer -->
+  <div style="margin-top:48px;padding-top:16px;border-top:1px solid #e8e8e8;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#aaa;letter-spacing:.3px;">Source: ChEMBL · PubChem · drugintelligence.bio</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#aaa;">Verify all values against primary literature before research or regulatory use</div>
+  </div>
+
+</div>
+</body>
+</html>`;
+
+  const blob = new Blob([html], {type:'text/html'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob);
-  a.download = `SAR_${currentCompound.replace(/\s+/g,'_')}_${date.replace(/ /g,'')}.txt`;
+  a.download = `SAR_${currentCompound.replace(/\s+/g,'_')}_${date.replace(/ /g,'')}.html`;
   a.click();
 }
 
