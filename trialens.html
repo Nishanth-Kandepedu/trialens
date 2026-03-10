@@ -1069,8 +1069,55 @@ async function generateSAR(i) {
 
     // Debug: log first few potency rows to verify reference field
     console.log('[SAR] potencyData sample:', potencyData.slice(0,3).map(a=>({type:a.type,ref:a.reference,species:a.species,assay:(a.assay||'').slice(0,40)})));
-    // Step 2b: Call Claude for dose-response, ADMET interpretation and narrative
-    setProgress(65, 'Generating ADMET & narrative...');
+    // Step 2a-b: Build ADMET table directly from real ChEMBL ADME/tox data — no Claude needed
+    setProgress(58, 'Building ADMET table...');
+
+    // Rate an ADME value based on endpoint type + numeric value
+    const rateAdmet = (type, value, unit) => {
+      const t = (type||'').toLowerCase();
+      const v = parseFloat(value);
+      if (isNaN(v)) return 'moderate';
+      // Half-life: >6h good, 1-6 moderate, <1 poor
+      if (t.includes('t1/2') || t.includes('half') || t.includes('thalf')) {
+        const hrs = (unit||'').toLowerCase().includes('min') ? v/60 : v;
+        return hrs >= 6 ? 'good' : hrs >= 1 ? 'moderate' : 'poor';
+      }
+      // Clearance: low is good (<15 mL/min/kg), high is poor (>70)
+      if (t.includes('cl') || t.includes('clearance')) {
+        return v < 15 ? 'good' : v < 70 ? 'moderate' : 'poor';
+      }
+      // Bioavailability %: >70 good, 30-70 moderate, <30 poor
+      if (t.includes('f%') || t.includes('bioavail') || t === 'f') {
+        return v >= 70 ? 'good' : v >= 30 ? 'moderate' : 'poor';
+      }
+      // Protein binding %: <90 good, 90-99 moderate, >99 poor
+      if (t.includes('protein') || t.includes('plasma protein') || t.includes('ppb')) {
+        return v < 90 ? 'good' : v < 99 ? 'moderate' : 'poor';
+      }
+      // hERG IC50 (µM): >30 good, 1-30 moderate, <1 poor
+      if (t.includes('herg')) {
+        const um = (unit||'').toLowerCase().includes('nm') ? v/1000 : v;
+        return um > 30 ? 'good' : um > 1 ? 'moderate' : 'poor';
+      }
+      // AUC, Cmax — no clear threshold, default moderate
+      return 'moderate';
+    };
+
+    const admetTableDirect = admeData
+      .filter(a => cleanVal(a.value))
+      .slice(0, 60)
+      .map(a => ({
+        property: a.type,
+        value:    a.value,
+        unit:     a.unit || '',
+        assay:    (a.assay || '').substring(0, 100),
+        rating:   rateAdmet(a.type, a.value, a.unit),
+        source:   a.reference || a.source || 'ChEMBL',
+        notes:    '',
+      }));
+
+    // Step 2b: Call Claude for dose-response and narrative only
+    setProgress(65, 'Generating narrative...');
 
     const hasPotency = potencyLines !== 'NONE';
     const hasAdme = admeLines !== 'NONE';
@@ -1104,16 +1151,6 @@ Return a JSON object with these exact keys:
 - toxicity_grade: integer 1-3 (1=mild, 2=moderate, 3=severe)
 - notes: one sentence citing specific trial context (phase, condition, primary outcome)
 
-"admet": Array from ADME/TOX DATA only. Each object: {property, value, unit, rating, notes, source}
-- property: standardised name (Half-life, Clearance, AUC, Protein Binding, hERG IC50, etc.)
-- value: EXACT numeric value from the data
-- unit: the unit
-- rating: "good", "moderate", or "poor" — based on the actual value
-- notes: brief interpretation of the actual value
-- source: the ChEMBL document ID or "PubChem CID ${pcid}"
-- If ADME/TOX DATA is NONE → return []
-- DO NOT include physicochemical properties (MW, LogP, TPSA) in this array
-
 "summary": 3-sentence narrative covering: (1) what potency/ADME data was found and key values, (2) clinical context interpretation, (3) what data gaps exist. Be specific about values found or absent.
 
 "sources": Array of source strings actually used, e.g. ["ChEMBL ${realData.chembl_id||''}", "PubChem CID ${pcid}", "ClinicalTrials.gov NCT${t.nctId||''}"]
@@ -1125,6 +1162,7 @@ Return ONLY valid JSON. No markdown, no explanation.`,
     setProgress(90, 'Rendering results...');
     // Use our directly-built data — don't trust Claude's copies
     sar.potency_table = potencyTableDirect;
+    sar.admet = admetTableDirect.length ? admetTableDirect : (sar.admet || []);
     sar.physicochemical = realData.physicochemical || null;
     sar._realData = realData;
     sar._sources = sar.sources || (realData.sources || []);
@@ -1487,6 +1525,11 @@ function renderDose(i, sar) {
 
   return `
     <div class="sec-lbl">Dose-Response</div>
+    <div style="display:flex;align-items:center;gap:8px;padding:9px 14px;margin-bottom:16px;
+      background:var(--gold-bg);border:1px solid var(--gold-border);border-radius:6px;
+      font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--gold);">
+      ⚠ AI-synthesised from ClinicalTrials.gov trial text — not raw measurement data. Verify against primary publications.
+    </div>
     <div class="stat-cards stat-cards-4">${cards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
       <table class="dose-table">
@@ -1498,23 +1541,23 @@ function renderDose(i, sar) {
 
 function renderAdmet(i, sar) {
   const rows = (sar.admet||[]).filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A');
-  const sourceOrder = {'ChEMBL':0,'PubChem BioAssay':1,'PubChem':2};
   const pc = sar.physicochemical || null;
   const rmap = {good:3, moderate:2, poor:1};
   const barColor = r => r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a';
   const ri = r => r==='good'?'▲':r==='poor'?'▼':'●';
   const rc = r => r==='good'?'r-good':r==='poor'?'r-poor':'r-mod';
 
-  // Top score cards — 4 per row (show first 8, covers all 7 properties)
-  const verifiedRows = rows.filter(r => {
-    const src = r.source || '';
-    return /^chembl/i.test(src) || /^pubchem/i.test(src) || /CHEMBL\d+/i.test(src) || /CID\s*\d+/i.test(src);
-  });
-  const scorecards = verifiedRows.map(r => {
+  // Score cards — one per unique property type (first occurrence)
+  const seen = new Set();
+  const scorecards = rows.filter(r => {
+    const k = (r.property||r.type||'').toUpperCase();
+    if (seen.has(k)) return false;
+    seen.add(k); return true;
+  }).slice(0,8).map(r => {
     const pct = ((rmap[r.rating]||2)/3)*100;
     const col = barColor(r.rating);
     return `<div class="admet-score-card">
-      <div class="admet-score-label">${r.property||''}</div>
+      <div class="admet-score-label">${r.property||r.type||''}</div>
       <div class="admet-score-bar-wrap"><div class="admet-score-bar" style="width:${pct}%;background:${col};"></div></div>
       <div class="admet-score-bottom">
         <span class="admet-score-val">${r.value||''}</span>
@@ -1523,61 +1566,34 @@ function renderAdmet(i, sar) {
     </div>`;
   }).join('');
 
-  // Also filter top-level rows var for downstream use
-  // Detail rows — only show if source is a real verified ChEMBL/PubChem ref
-  const hasVerifiedSource = (src) => {
-    if (!src) return false;
-    return /^chembl/i.test(src) || /^pubchem/i.test(src) || /CHEMBL\d+/i.test(src) || /CID\s*\d+/i.test(src);
-  };
-  // Filter to human/rat/mouse only
-  const humanRatMouseAdmet = sp => {
-    if (!sp) return true;
-    const s = sp.toLowerCase();
-    return s === 'human' || s === 'rat' || s === 'mouse' ||
-           s.includes('homo') || s.includes('rattus') ||
-           s.includes('mus ') || s.includes('murine');
-  };
-  const admetRowsArr = rows
-    .filter(r => hasVerifiedSource(r.source))
-    .filter(r => {
-      // Get species from field or property name
-      let sp = r.species || '';
-      if (!sp) {
-        const prop = (r.property||'').toLowerCase();
-        if (prop.includes('human')) sp = 'human';
-        else if (prop.includes('rat')) sp = 'rat';
-        else if (prop.includes('mouse') || prop.includes('murine')) sp = 'mouse';
-        else if (prop.includes('monkey') || prop.includes('primate') || prop.includes('dog') || prop.includes('canine')) sp = 'other';
-      }
-      return humanRatMouseAdmet(sp);
-    })
-    .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
-    .map(r => {
-      return `<tr>
-        <td style="font-weight:600;color:var(--ink2);font-size:13px;">${r.property||''}</td>
-        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
-        <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
-        <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
-        <td style="color:var(--ink3);font-size:12px;">${r.notes||''}</td>
-      </tr>`;
-    });
-  const admetPaged = paginatedTable(admetRowsArr, 'admet-'+i);
-  const admetPageCtrl = admetPaged.controls;
+  const admetRowsArr = rows.map(r => {
+    const src = r.source || '';
+    const sourceBadge = src ? srcBadgeHtml(src) : '';
+    return `<tr>
+      <td style="font-weight:600;color:var(--ink2);font-size:13px;">${r.property||r.type||''}</td>
+      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
+      <td style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,80)}</td>
+      <td style="white-space:nowrap;">${sourceBadge}</td>
+      <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
+    </tr>`;
+  });
 
-  const noAdmet = !verifiedRows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL or PubChem for this compound.</div>' : '';
+  const admetPaged = paginatedTable(admetRowsArr, 'admet-'+i);
+  const noAdmet = !rows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL for this compound.</div>' : '';
 
   return `
     <div class="sec-lbl">ADMET Properties</div>
     ${noAdmet}
-    ${verifiedRows.length ? `
-    <div class="admet-score-grid">${scorecards}</div>
+    ${rows.length ? `
+    ${scorecards.length ? `<div class="admet-score-grid">${scorecards}</div>` : ''}
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
       <table class="potency-table">
-        <thead><tr><th>Property</th><th>Value</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Property</th><th>Value</th><th>Assay</th><th>Source</th><th>Rating</th></tr></thead>
         ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
       </table>
-      ${admetPageCtrl}
+      ${admetPaged.controls}
     </div>` : ''}`;
+
 }
 
 function renderNarrative(i, sar) {
