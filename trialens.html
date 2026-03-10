@@ -2476,15 +2476,14 @@ function buildAndDownloadTrial(t, nct, cond, enroll, date, structureB64) {
         </div>`).join('')}
     </div>` : '';
 
-  // Eligibility
-  const eligHtml = (t.eligibility && (t.eligibility.sex || t.eligibility.minAge || t.eligibility.criteria)) ? `
+  // Eligibility — sex + age only, matching the UI card
+  const eligHtml = (t.eligibility && (t.eligibility.sex || t.eligibility.minAge)) ? `
     <div style="${secWrap}">
       <div style="${secLbl}">Eligibility</div>
-      <div style="display:flex;gap:20px;margin-bottom:10px;flex-wrap:wrap;">
+      <div style="display:flex;gap:20px;flex-wrap:wrap;">
         ${t.eligibility.sex ? `<span style="font-size:12px;color:#222;"><span style="color:#888;">Sex</span> ${t.eligibility.sex}</span>` : ''}
         ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:#222;"><span style="color:#888;">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
       </div>
-      ${t.eligibility.criteria ? `<div style="font-size:12px;color:#555;line-height:1.65;white-space:pre-line;">${t.eligibility.criteria}</div>` : ''}
     </div>` : '';
 
   // Posted Results
