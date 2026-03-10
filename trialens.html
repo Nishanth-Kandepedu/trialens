@@ -1146,15 +1146,14 @@ function srcBadgeHtml(src) {
   if (!src) return '';
   const s = src.trim();
 
-  // Whitelist: only these patterns are accepted as real sources
-  const isChEMBL = /CHEMBL\d+/i.test(s);
-  const isPubChem = /PubChem|CID\s*\d+/i.test(s);
-  const isClinical = /ClinicalTrials|NCT\d+/i.test(s);
-  const isKnown = isChEMBL || isPubChem || isClinical;
+  // Recognise known source strings
+  const isChEMBL   = /^chembl$/i.test(s) || /CHEMBL\d+/i.test(s);
+  const isPubChem   = /^pubchem/i.test(s) || /CID\s*\d+/i.test(s);
+  const isClinical  = /ClinicalTrials|NCT\d+/i.test(s);
+  const isKnown     = isChEMBL || isPubChem || isClinical;
 
   if (!isKnown) {
-    // Anything else — grey "unverified" with no link
-    return '<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:#f0ede6;color:#b5b0a8;border:1px solid #ddd9cf;font-weight:600;">unverified</span>';
+    return '<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:var(--paper2);color:var(--ink3);border:1px solid var(--paper3);font-weight:600;">' + s + '</span>';
   }
 
   const sc = isChEMBL ? '#2a5f9e' : isPubChem ? '#2a7a52' : '#6b4fa0';
@@ -1178,8 +1177,9 @@ function srcBadgeHtml(src) {
     return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">PubChem CID ${pubchemMatch[1]} ↗</a>`;
   }
 
-  // Generic known source label
-  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;">${s}</span>`;
+  // Plain source label (e.g. "ChEMBL", "PubChem BioAssay")
+  const label = isChEMBL ? 'ChEMBL' : isPubChem ? s : s;
+  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}15;color:${sc};border:1px solid ${sc}30;font-weight:600;white-space:nowrap;">${label}</span>`;
 }
 
 function paginatedTable(rowsArr, tableId, pageSize=10) {
@@ -1251,8 +1251,8 @@ function renderPotency(i, sar) {
     .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'))
     .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
     .map(r => {
-      const docRef = r.ref || r.chembl_assay_id || '';
-      const assayLink = docRef
+      const docRef = r.reference || r.ref || r.chembl_assay_id || '';
+      const assayLink = docRef && /^CHEMBL/i.test(docRef)
         ? `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${docRef}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--blue);text-decoration:none;">${docRef} ↗</a>`
         : srcBadgeHtml(r.source);
       return `<tr>
