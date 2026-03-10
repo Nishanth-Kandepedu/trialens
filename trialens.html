@@ -2205,6 +2205,29 @@ function downloadCompoundSAR() {
   const date = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
   const pc = sar.physicochemical || {};
 
+  // Fetch structure as base64 so it embeds in the offline HTML file
+  async function getStructureB64() {
+    if (!window._structureImgUrl) return null;
+    try {
+      const res = await fetch(window._structureImgUrl);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise(resolve => {
+        const r = new FileReader();
+        r.onload = () => resolve(r.result);
+        r.onerror = () => resolve(null);
+        r.readAsDataURL(blob);
+      });
+    } catch(e) { return null; }
+  }
+
+  getStructureB64().then(structureB64 => {
+    buildAndDownloadSAR(sar, rd, pc, date, structureB64);
+  });
+}
+
+function buildAndDownloadSAR(sar, rd, pc, date, structureB64) {
+
   const tableStyle = `width:100%;border-collapse:collapse;font-size:12px;margin-top:10px;`;
   const thStyle = `padding:7px 12px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#888;background:#f5f5f5;border-bottom:1px solid #e8e8e8;font-weight:500;`;
   const tdStyle = `padding:9px 12px;border-bottom:1px solid #f0f0f0;color:#222;vertical-align:middle;`;
@@ -2288,8 +2311,8 @@ function downloadCompoundSAR() {
   <!-- Header -->
   <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:36px;padding-bottom:24px;border-bottom:2px solid #0a0a0a;">
     <div style="display:flex;align-items:flex-start;gap:24px;">
-      ${window._structureImgUrl ? `<div style="background:#f5f5f5;border:1px solid #e8e8e8;border-radius:10px;padding:14px;flex-shrink:0;">
-        <img src="${window._structureImgUrl}" alt="${currentCompound}" style="width:140px;height:100px;object-fit:contain;display:block;" />
+      ${structureB64 ? `<div style="background:#f5f5f5;border:1px solid #e8e8e8;border-radius:10px;padding:14px;flex-shrink:0;">
+        <img src="${structureB64}" alt="${currentCompound}" style="width:140px;height:100px;object-fit:contain;display:block;" />
       </div>` : ''}
       <div>
         <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#888;margin-bottom:8px;">SAR Intelligence Report</div>
@@ -2368,6 +2391,23 @@ function downloadTrial(i) {
   const enroll = t.enrollment ? parseInt(t.enrollment).toLocaleString() + ' participants' : '—';
   const date = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
 
+  async function getStructureB64() {
+    if (!window._structureImgUrl) return null;
+    try {
+      const res = await fetch(window._structureImgUrl);
+      if (!res.ok) return null;
+      const blob = await res.blob();
+      return await new Promise(resolve => {
+        const r = new FileReader(); r.onload = () => resolve(r.result); r.onerror = () => resolve(null); r.readAsDataURL(blob);
+      });
+    } catch(e) { return null; }
+  }
+
+  getStructureB64().then(structureB64 => { buildAndDownloadTrial(t, nct, cond, enroll, date, structureB64); });
+}
+
+function buildAndDownloadTrial(t, nct, cond, enroll, date, structureB64) {
+
   const thS = `padding:7px 12px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#888;background:#f5f5f5;border-bottom:1px solid #e8e8e8;font-weight:500;`;
   const tdS = `padding:9px 12px;border-bottom:1px solid #f0f0f0;color:#222;vertical-align:top;font-size:12.5px;`;
   const secLbl = `font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#888;padding-bottom:8px;border-bottom:1px solid #e8e8e8;margin-bottom:14px;`;
@@ -2378,9 +2418,9 @@ function downloadTrial(i) {
   }
 
   // Structure image
-  const structHtml = window._structureImgUrl ? `
+  const structHtml = structureB64 ? `
     <div style="float:right;margin:0 0 16px 24px;background:#f5f5f5;border:1px solid #e8e8e8;border-radius:10px;padding:12px;text-align:center;">
-      <img src="${window._structureImgUrl}" alt="${currentCompound}" style="width:130px;height:95px;object-fit:contain;display:block;" />
+      <img src="${structureB64}" alt="${currentCompound}" style="width:130px;height:95px;object-fit:contain;display:block;" />
       <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#888;margin-top:6px;">${currentCompound}</div>
     </div>` : '';
 
@@ -2594,10 +2634,10 @@ function renderStructurePanel(compound, cid, props, chemblId) {
   const panel = document.getElementById('compound-structure-panel');
   if (!panel) return;
 
-  // ChEMBL SVG is cleaner — use it if we have the ID, else PubChem PNG
+  // Always use our server proxy — avoids CORS issues with ChEMBL image API
   const imgUrl = chemblId
-    ? `https://www.ebi.ac.uk/chembl/api/data/image/${chemblId}?engine=indigo`
-    : `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/PNG?image_size=300x200`;
+    ? `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${cid||''}`
+    : `/api/structure?cid=${cid||''}`;
 
   window._structureImgUrl = imgUrl;
   window._structureChemblId = chemblId;
@@ -2612,7 +2652,7 @@ function renderStructurePanel(compound, cid, props, chemblId) {
       <div style="padding:20px 28px;background:var(--paper2);border-right:1px solid var(--paper3);display:flex;align-items:center;justify-content:center;min-width:200px;">
         <img src="${imgUrl}" alt="Structure of ${compound}"
           style="max-width:170px;max-height:130px;object-fit:contain;"
-          onerror="this.src='https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/PNG?image_size=300x200'" />
+          onerror="this.src='/api/structure?cid=${cid}'" />
       </div>
       <div style="padding:20px 28px;flex:1;display:flex;flex-direction:column;justify-content:center;">
         <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;">Compound</div>

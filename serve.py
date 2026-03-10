@@ -778,6 +778,45 @@ class Handler(BaseHTTPRequestHandler):
             self.wfile.write(login_bytes)
             return
 
+        if path == "/api/structure":
+            # Proxy ChEMBL structure image to avoid browser CORS issues
+            qs = urlparse(self.path).query
+            params = urllib.parse.parse_qs(qs)
+            chembl_id = params.get("chembl_id", [None])[0]
+            cid = params.get("cid", [None])[0]
+            img_bytes = None
+            content_type = "image/png"
+            if chembl_id:
+                try:
+                    url = f"https://www.ebi.ac.uk/chembl/api/data/image/{chembl_id}?engine=indigo"
+                    req = urllib.request.Request(url, headers={"User-Agent": "DrugIntelligence/1.0"})
+                    with urllib.request.urlopen(req, timeout=8) as r:
+                        img_bytes = r.read()
+                        ct = r.headers.get("Content-Type", "image/png")
+                        content_type = ct.split(";")[0].strip()
+                except Exception as e:
+                    print(f"[Structure] ChEMBL fetch failed: {e}", flush=True)
+            if not img_bytes and cid:
+                try:
+                    url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/PNG?image_size=300x200"
+                    req = urllib.request.Request(url, headers={"User-Agent": "DrugIntelligence/1.0"})
+                    with urllib.request.urlopen(req, timeout=8) as r:
+                        img_bytes = r.read()
+                        content_type = "image/png"
+                except Exception as e:
+                    print(f"[Structure] PubChem fetch failed: {e}", flush=True)
+            if img_bytes:
+                self.send_response(200)
+                self.send_header("Content-Type", content_type)
+                self.send_header("Content-Length", str(len(img_bytes)))
+                self.send_header("Cache-Control", "public, max-age=86400")
+                self.end_headers()
+                self.wfile.write(img_bytes)
+            else:
+                self.send_response(404)
+                self.end_headers()
+            return
+
         if path == "/app":
             if not is_valid_session(token):
                 self.redirect("/login")
