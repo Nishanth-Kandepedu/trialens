@@ -1228,17 +1228,17 @@ function renderPotency(i, sar) {
     .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'))
     .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
     .map(r => {
-      const docRef = r.reference || r.ref || r.chembl_assay_id || '';
-      const assayLink = docRef && /^CHEMBL/i.test(docRef)
-        ? `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${docRef}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--blue);text-decoration:none;">${docRef} ↗</a>`
-        : srcBadgeHtml(r.source);
+      const docRef = r.reference || r.ref || '';
+      const docLink = docRef && /^CHEMBL/i.test(docRef)
+        ? ` <a href="https://www.ebi.ac.uk/chembl/document_report_card/${docRef}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;color:var(--blue);text-decoration:none;">${docRef} ↗</a>`
+        : '';
       return `<tr>
         <td class="p-endpoint">${r.endpoint||''}</td>
         <td class="p-value">${r.value||''}</td>
         <td class="p-unit">${r.unit||''}</td>
-        <td class="p-assay">${r.assay||''}</td>
-        <td style="font-size:11px;color:var(--ink3);">${r.bio_source||'—'}</td>
-        <td style="white-space:nowrap;">${assayLink}</td>
+        <td class="p-assay" style="font-size:12px;">${r.assay||''}${docLink}</td>
+        <td style="font-size:11px;color:var(--ink3);font-style:italic;">${r.species||r.bio_source||'—'}</td>
+        <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
       </tr>`;
     });  // Keep as array for pagination
 
@@ -1257,7 +1257,7 @@ function renderPotency(i, sar) {
     ${realRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
     <table class="potency-table">
-      <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Biological Source</th><th>Source</th></tr></thead>
+      <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Species</th><th>Source</th></tr></thead>
       ${potPaged.paginated ? potPaged.body : '<tbody>' + potPaged.body + '</tbody>'}
     </table>
     ${potPaged.controls}
@@ -1352,7 +1352,7 @@ function renderAdmet(i, sar) {
     .map(r => `<tr>
       <td style="font-weight:600;color:var(--ink2);">${r.property||''}</td>
       <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
-      <td style="font-size:11px;color:var(--ink3);">${r.bio_source||'—'}</td>
+      <td style="font-size:11px;color:var(--ink3);font-style:italic;">${r.species||r.bio_source||'—'}</td>
       <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
       <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
       <td style="color:var(--ink3);font-size:12px;">${r.notes||''}</td>
@@ -1369,7 +1369,7 @@ function renderAdmet(i, sar) {
     <div class="admet-score-grid">${scorecards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
       <table class="potency-table">
-        <thead><tr><th>Property</th><th>Value</th><th>Biological Source</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Property</th><th>Value</th><th>Species</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
         ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
       </table>
       ${admetPageCtrl}
