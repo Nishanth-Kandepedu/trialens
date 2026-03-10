@@ -860,10 +860,6 @@ function renderTrialCard(t, i) {
             <div class="loader-spinner"></div>
             <div class="loader-step-label" id="prog-label-${i}">Initialising…</div>
             <div class="loader-bar-track"><div class="loader-bar-fill" id="prog-bar-${i}" style="width:0%"></div></div>
-            <div style="width:100%;display:flex;flex-direction:column;gap:8px;margin-top:8px;">
-              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
-              <div class="skeleton-row"><div class="skeleton-block"></div><div class="skeleton-block short"></div><div class="skeleton-block short"></div><div class="skeleton-block"></div></div>
-            </div>
           </div>
         </div>
         <div class="sar-results" id="sar-results-${i}"></div>
@@ -1388,31 +1384,42 @@ function renderAdmet(i, sar) {
   const admetRowsArr = rows
     .filter(r => hasVerifiedSource(r.source))
     .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
-    .map(r => `<tr>
-      <td style="font-weight:600;color:var(--ink2);">${r.property||''}</td>
-      <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
-      <td style="font-size:11px;color:var(--ink3);font-style:italic;">${r.species||r.bio_source||'—'}</td>
-      <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
-      <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
-      <td style="color:var(--ink3);font-size:12px;">${r.notes||''}</td>
-    </tr>`);
+    .map(r => {
+      // Parse species from property name if not already set (e.g. "Half-life (Human)" → Homo sapiens)
+      let sp = r.species || '';
+      if (!sp) {
+        const prop = (r.property||'').toLowerCase();
+        if (prop.includes('human')) sp = 'Homo sapiens';
+        else if (prop.includes('rat')) sp = 'Rattus norvegicus';
+        else if (prop.includes('monkey') || prop.includes('primate')) sp = 'Non-human primate';
+        else if (prop.includes('mouse') || prop.includes('murine')) sp = 'Mus musculus';
+        else if (prop.includes('dog') || prop.includes('canine')) sp = 'Canis lupus familiaris';
+      }
+      const spStr = sp ? `<span style="font-size:10px;color:var(--ink3);font-style:italic;">${sp}</span>` : '';
+      return `
+    <div class="admet-row">
+      <div class="admet-prop">${r.property||''}</div>
+      <div class="admet-val-cell">${r.value||''} ${r.unit||''} ${spStr}</div>
+      <div class="admet-rating-cell"><span class="${rc(r.rating)}">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></div>
+      <div class="admet-notes-cell">${srcBadgeHtml(r.source)} ${r.notes||''}</div>
+    </div>`;
+    });
   const admetPaged = paginatedTable(admetRowsArr, 'admet-'+i);
   const admetPageCtrl = admetPaged.controls;
 
   const noAdmet = !verifiedRows.length ? '<div style="padding:20px;color:var(--ink3);font-size:13px;">No experimental ADME/tox data found in ChEMBL or PubChem for this compound.</div>' : '';
 
+  const hdr = `<div style="display:grid;grid-template-columns:180px 1fr auto 280px;gap:16px;padding:8px 16px;background:var(--paper2);border-radius:6px 6px 0 0;border:1px solid var(--paper3);border-bottom:none;">
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Property</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Value · Species</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Rating</span>
+    <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);">Source · Notes</span>
+  </div>`;
+
   return `
     <div class="sec-lbl">ADMET Properties</div>
     ${noAdmet}
-    ${verifiedRows.length ? `
-    <div class="admet-score-grid">${scorecards}</div>
-    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
-      <table class="potency-table">
-        <thead><tr><th>Property</th><th>Value</th><th>Species</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
-        ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
-      </table>
-      ${admetPageCtrl}
-    </div>` : ''}`;
+    ${verifiedRows.length ? `<div class="admet-score-grid">${scorecards}</div>${hdr}<div style="border:1px solid var(--paper3);border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">${admetPaged.paginated ? admetPaged.body : admetPaged.body}${admetPageCtrl}</div>` : ''}`;
 }
 
 function renderNarrative(i, sar) {
