@@ -1168,9 +1168,6 @@ Return ONLY valid JSON.`,
     };
     compoundSarCache = sar;
 
-    // Upgrade structure panel to ChEMBL clean image now that we have the ID
-    if (realData.chembl_id) upgradeStructureToChEMBL(realData.chembl_id);
-
     // Render into panel — same tab system but no Dose-Response
     panel.innerHTML = `
       <div style="border:1px solid var(--paper3);border-radius:12px;overflow:hidden;background:var(--paper);">
@@ -2668,26 +2665,6 @@ async function renderCompoundStructure(compound) {
 }
 
 // Upgrade structure panel image to ChEMBL clean white-background structure
-function upgradeStructureToChEMBL(chemblId, cid) {
-  if (!chemblId) return;
-  const img = document.querySelector('#compound-structure-panel img');
-  if (!img) return;
-  const useCid = cid || window._structureCID || '';
-  const chemblUrl = `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${useCid}`;
-  window._structureImgUrl = chemblUrl;
-  img.src = chemblUrl;
-  // Add ChEMBL link to panel if not already there
-  const linksDiv = document.querySelector('#compound-structure-panel .structure-links');
-  if (linksDiv && !linksDiv.querySelector('.chembl-link')) {
-    const a = document.createElement('a');
-    a.href = `https://www.ebi.ac.uk/chembl/compound_report_card/${chemblId}`;
-    a.target = '_blank';
-    a.className = 'chembl-link';
-    a.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--green);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--green-border);border-radius:4px;background:var(--green-bg);";
-    a.textContent = `${chemblId} ↗`;
-    linksDiv.appendChild(a);
-  }
-}
 
 function renderStructurePanel(compound, cid, props, imgUrl, chemblId) {
   const panel = document.getElementById('compound-structure-panel');
