@@ -140,12 +140,14 @@ def normalise_phase(raw):
     if "PHASE4" in r or "PHASE 4" in r: return "Phase 4"
     return raw.replace("_"," ").title()
 
-def fetch_trials(compound):
+def fetch_trials(compound, status_filter=""):
     base_params = {
         "query.intr": compound,
         "format": "json",
         "sort": "LastUpdatePostDate:desc"
     }
+    if status_filter:
+        base_params["filter.overallStatus"] = status_filter
     # countTotal=true tells the API to include totalCount in the response
     count_params = urllib.parse.urlencode({**base_params, "pageSize": "1", "countTotal": "true"})
     try:
@@ -1053,7 +1055,7 @@ class Handler(BaseHTTPRequestHandler):
 
         elif path == "/api/trials":
             try:
-                trials, total_count = fetch_trials(body.get("compound",""))
+                trials, total_count = fetch_trials(body.get("compound",""), body.get("status",""))
                 resp = json.dumps({"trials": trials, "totalCount": total_count}).encode()
             except Exception as e:
                 resp = json.dumps({"error": str(e)}).encode()

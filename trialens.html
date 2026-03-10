@@ -177,6 +177,9 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 .quick-chips { display: flex; flex-wrap: wrap; gap: 7px; }
 .quick-chip { padding: 5px 13px; border: 1px solid var(--paper3); border-radius: 20px; font-size: 12px; color: var(--ink3); background: var(--paper2); cursor: pointer; transition: all .15s; font-family: 'Inter', sans-serif; }
 .quick-chip:hover { border-color: var(--blue); color: var(--blue); background: var(--blue-bg); }
+.status-filter-btn { padding: 4px 11px; border: 1px solid var(--paper3); border-radius: 20px; font-size: 11px; font-family: 'IBM Plex Mono', monospace; color: var(--ink4); background: var(--paper2); cursor: pointer; transition: all .15s; }
+.status-filter-btn:hover { border-color: var(--gold); color: var(--gold); }
+.status-filter-btn.active { border-color: var(--gold); color: var(--gold); background: var(--gold-bg); font-weight: 600; }
 
 /* API key row */
 .api-bar { display: none !important; }
@@ -534,6 +537,17 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
         Search
       </button>
     </div>
+    <div style="display:flex;align-items:center;gap:10px;margin-top:10px;flex-wrap:wrap;">
+      <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:var(--ink4);">Trial Status</span>
+      <div id="status-filters" style="display:flex;gap:6px;flex-wrap:wrap;">
+        <button class="status-filter-btn active" data-status="" onclick="setStatusFilter(this,'')">All</button>
+        <button class="status-filter-btn" data-status="RECRUITING" onclick="setStatusFilter(this,'RECRUITING')">Recruiting</button>
+        <button class="status-filter-btn" data-status="ACTIVE_NOT_RECRUITING" onclick="setStatusFilter(this,'ACTIVE_NOT_RECRUITING')">Active</button>
+        <button class="status-filter-btn" data-status="COMPLETED" onclick="setStatusFilter(this,'COMPLETED')">Completed</button>
+        <button class="status-filter-btn" data-status="NOT_YET_RECRUITING" onclick="setStatusFilter(this,'NOT_YET_RECRUITING')">Not Yet Recruiting</button>
+        <button class="status-filter-btn" data-status="TERMINATED" onclick="setStatusFilter(this,'TERMINATED')">Terminated</button>
+      </div>
+    </div>
     <div class="quick-label">Quick search</div>
     <div class="quick-chips">
       <span class="quick-chip" onclick="quickSearch('Semaglutide')">Semaglutide</span>
@@ -652,6 +666,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
 let apiKey = (window.__TL_CONFIGURED__) ? 'server-proxy' : '';
 let currentCompound = '';
 let currentTrials = [];
+let selectedStatus = '';
 let sarCache = {};
 let compoundSAR = null;
 let savedReports = JSON.parse(localStorage.getItem('tl-saved') || '[]');
@@ -699,6 +714,12 @@ function showView(v) {
 // ── SEARCH ─────────────────────────────────────────────────────
 function quickSearch(q) { document.getElementById('search-input').value = q; runSearch(); }
 
+function setStatusFilter(btn, status) {
+  selectedStatus = status;
+  document.querySelectorAll('.status-filter-btn').forEach(b => b.classList.remove('active'));
+  btn.classList.add('active');
+}
+
 async function runSearch() {
   if (!apiKey) { showToast('Please enter your Anthropic API key first.'); apiInput.focus(); return; }
   const q = document.getElementById('search-input').value.trim();
@@ -715,20 +736,19 @@ async function runSearch() {
     const res = await fetch('/api/trials', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ compound: q })
+      body: JSON.stringify({ compound: q, status: selectedStatus || undefined })
     });
     const data = await res.json();
     clearInterval(iv);
 
     if (data.error) throw new Error(data.error);
-    if (!data.trials || data.trials.length === 0) throw new Error('No trials found for "' + q + '" on ClinicalTrials.gov');
+    if (!data.trials || data.trials.length === 0) throw new Error('No trials found for "' + q + '"' + (selectedStatus ? ' with status: ' + selectedStatus : '') + ' on ClinicalTrials.gov');
 
     setLoadBar(100);
     await sleep(300);
     hideLoading();
     currentTrials = data.trials;
     const totalCount = (data.totalCount != null) ? data.totalCount : data.trials.length;
-    console.log('[Trials] fetched:', data.trials.length, 'totalCount from API:', data.totalCount);
     renderResults(q, data.trials, totalCount);
   } catch(e) {
     hideLoading();
@@ -843,18 +863,6 @@ function renderTrialCard(t, i) {
   const condBadge = cond ? `<span class="badge bd-gray">${cond.split(',')[0].trim().slice(0,40)}</span>` : '';
   const enrollStr = t.enrollment ? parseInt(t.enrollment).toLocaleString() + ' participants' : '—';
 
-  // Trim summary to ~3 sentences
-  function trimSummary(text) {
-    if (!text) return '';
-    const sentences = text.match(/[^.!?]+[.!?]+/g) || [];
-    if (sentences.length <= 3) return text;
-    return sentences.slice(0, 3).join(' ').trim() + ' <span style="color:var(--ink4);font-size:11px;">…more</span>';
-  }
-
-  // Primary outcomes only; show count of secondaries
-  const primaryOutcomes = (t.outcomes||[]).filter(o => o.type === 'primary');
-  const secondaryCount = (t.outcomes||[]).filter(o => o.type === 'secondary').length;
-
   return `
   <div class="trial-card" id="trial-${i}">
     <div class="trial-summary" onclick="toggleTrial(${i})">
@@ -881,12 +889,12 @@ function renderTrialCard(t, i) {
         <div class="dg-item"><div class="dg-label">Est. Completion</div><div class="dg-value">${t.completionDate||'—'}</div></div>
       </div>
 
-      ${t.summary ? `<div class="trial-summary-text">${trimSummary(t.summary)}</div>` : ''}
+      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
 
       ${(t.interventions && t.interventions.length) ? `
         <div class="trial-outcome">
           <div class="outcome-label" style="margin-bottom:8px;">Interventions &amp; Dosing</div>
-          ${t.interventions.slice(0,4).map(iv => `
+          ${t.interventions.map(iv => `
             <div style="margin-bottom:8px;">
               <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
                 <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;
@@ -895,19 +903,20 @@ function renderTrialCard(t, i) {
               </div>
               ${iv.desc ? `<div style="font-size:12px;color:var(--ink3);padding-left:2px;">${iv.desc}</div>` : ''}
             </div>`).join('')}
-          ${t.interventions.length > 4 ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;">+${t.interventions.length - 4} more — see download for full list</div>` : ''}
         </div>` : ''}
 
-      ${primaryOutcomes.length ? `
+      ${(t.outcomes && t.outcomes.length) ? `
         <div class="trial-outcome">
-          <div class="outcome-label" style="margin-bottom:8px;">Primary Outcome${primaryOutcomes.length > 1 ? 's' : ''}</div>
-          ${primaryOutcomes.map(o => `
+          <div class="outcome-label" style="margin-bottom:8px;">Outcomes &amp; Measures</div>
+          ${t.outcomes.map(o => `
             <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:6px;">
               <span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 6px;border-radius:3px;white-space:nowrap;
-                background:var(--blue-bg);color:var(--blue);border:1px solid var(--blue-border);font-weight:600;">PRIMARY</span>
+                background:${o.type==='primary'?'var(--blue-bg)':'var(--paper3)'};
+                color:${o.type==='primary'?'var(--blue)':'var(--ink4)'};
+                border:1px solid ${o.type==='primary'?'var(--blue-border)':'var(--paper3)'};
+                font-weight:600;">${o.type==='primary'?'PRIMARY':'SECONDARY'}</span>
               <span style="font-size:13px;color:var(--ink2);">${o.measure}${o.timeframe?`<span style="color:var(--ink4);font-size:11px;margin-left:6px;">${o.timeframe}</span>`:''}</span>
             </div>`).join('')}
-          ${secondaryCount ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;margin-top:4px;">${secondaryCount} secondary endpoint${secondaryCount>1?'s':''} — see download for details</div>` : ''}
         </div>` : (t.primaryOutcome ? `<div class="trial-outcome"><div class="outcome-label">Primary Outcome</div><div class="outcome-text">${t.primaryOutcome}</div></div>` : '')}
 
       ${t.eligibility && (t.eligibility.minAge || t.eligibility.sex) ? `
@@ -917,7 +926,6 @@ function renderTrialCard(t, i) {
             ${t.eligibility.sex ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Sex</span> ${t.eligibility.sex}</span>` : ''}
             ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:var(--ink2);"><span style="color:var(--ink4);">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
           </div>
-          ${t.eligibility.criteria ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;margin-top:6px;">Full eligibility criteria in download ↓</div>` : ''}
         </div>` : ''}
 
       ${t.postedResults ? `
@@ -2592,48 +2600,70 @@ async function renderCompoundStructure(compound) {
   panel.innerHTML = '';
 
   try {
+    // Fetch PubChem props (formula, MW, IUPAC) — lightweight, fast
     const cidRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(compound)}/cids/JSON`);
-    if (!cidRes.ok) return;
-    const cidData = await cidRes.json();
-    const cid = cidData?.IdentifierList?.CID?.[0];
-    if (!cid) return;
+    const cid = cidRes.ok ? (await cidRes.json())?.IdentifierList?.CID?.[0] : null;
+    const props = {};
+    if (cid) {
+      const propRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/MolecularFormula,IUPACName,MolecularWeight/JSON`);
+      if (propRes.ok) Object.assign(props, (await propRes.json())?.PropertyTable?.Properties?.[0] || {});
+    }
+    window._structureCID = cid;
+    window._structureProps = props;
 
-    const propRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/MolecularFormula,IUPACName,MolecularWeight/JSON`);
-    const propData = propRes.ok ? await propRes.json() : null;
-    const props = propData?.PropertyTable?.Properties?.[0] || {};
-
-    // Show spinner immediately — skip PubChem flash entirely
+    // Show spinner with compound name while ChEMBL ID resolves
     panel.style.display = 'block';
     panel.innerHTML = `
-      <div style="border:1px solid var(--paper3);border-radius:12px;background:var(--paper);overflow:hidden;display:flex;align-items:stretch;gap:0;">
-        <div style="padding:20px 28px;background:var(--paper2);border-right:1px solid var(--paper3);display:flex;align-items:center;justify-content:center;min-width:200px;">
+      <div style="border:1px solid var(--paper3);border-radius:12px;background:var(--paper);overflow:hidden;display:flex;align-items:stretch;">
+        <div id="structure-img-box" style="padding:20px 28px;background:var(--paper2);border-right:1px solid var(--paper3);display:flex;align-items:center;justify-content:center;min-width:200px;">
           <div style="width:40px;height:40px;border:3px solid var(--paper3);border-top-color:var(--gold);border-radius:50%;animation:spin 0.8s linear infinite;"></div>
         </div>
         <div style="padding:20px 28px;flex:1;display:flex;flex-direction:column;justify-content:center;">
           <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;">Compound</div>
-          <div style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.3px;">${compound}</div>
-          <div style="font-size:11px;color:var(--ink4);margin-top:8px;">Loading structure…</div>
+          <div style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.3px;margin-bottom:8px;">${compound}</div>
+          ${props.MolecularFormula ? `<div style="font-size:13px;color:var(--ink2);margin-bottom:4px;">${props.MolecularFormula.replace(/(\d+)/g,'<sub>$1</sub>')}${props.MolecularWeight?` &nbsp;·&nbsp; <span style="color:var(--ink3);">MW ${props.MolecularWeight} Da</span>`:''}</div>` : ''}
+          ${props.IUPACName ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;line-height:1.5;margin-top:4px;max-width:520px;">${props.IUPACName}</div>` : ''}
+          <div id="structure-links" class="structure-links" style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
+            ${cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${cid}" target="_blank"
+              style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--blue);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--blue-border);border-radius:4px;background:var(--blue-bg);">PubChem CID ${cid} ↗</a>` : ''}
+          </div>
         </div>
       </div>`;
 
-    // Kick off ChEMBL resolve — render full panel when ready
-    fetch(`/api/resolve-chembl?compound=${encodeURIComponent(compound)}`)
-      .then(r => r.ok ? r.json() : null)
-      .then(data => {
-        const chemblId = data?.chembl_id || '';
-        const imgUrl = chemblId
-          ? `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${cid}`
-          : `/api/structure?cid=${cid}`;
-        window._structureImgUrl = imgUrl;
-        if (chemblId) window._structureChemblId = chemblId;
-        renderStructurePanel(compound, cid, props, imgUrl, chemblId);
-      })
-      .catch(() => {
-        // Fallback to PubChem only if resolve fails
-        const imgUrl = `/api/structure?cid=${cid}`;
-        window._structureImgUrl = imgUrl;
-        renderStructurePanel(compound, cid, props, imgUrl, '');
-      });
+    // Resolve ChEMBL ID, then swap spinner for the image directly
+    const res = await fetch(`/api/resolve-chembl?compound=${encodeURIComponent(compound)}`);
+    const data = res.ok ? await res.json() : {};
+    const chemblId = data?.chembl_id || '';
+
+    const imgBox = document.getElementById('structure-img-box');
+    if (!imgBox) return;
+
+    if (chemblId) {
+      // Direct ChEMBL URL in <img> — no server proxy, no CORS issue with img tags
+      const chemblImgUrl = `https://www.ebi.ac.uk/chembl/api/data/image/${chemblId}`;
+      window._structureImgUrl = chemblImgUrl;
+      window._structureChemblId = chemblId;
+      imgBox.innerHTML = `<img src="${chemblImgUrl}" alt="${compound}"
+        style="max-width:170px;max-height:130px;object-fit:contain;"
+        onerror="this.parentElement.innerHTML='<span style=\\'font-size:11px;color:var(--ink4);\\'>Structure unavailable</span>'" />`;
+      // Add ChEMBL link
+      const linksDiv = document.getElementById('structure-links');
+      if (linksDiv) {
+        const a = document.createElement('a');
+        a.href = `https://www.ebi.ac.uk/chembl/compound_report_card/${chemblId}`;
+        a.target = '_blank';
+        a.style.cssText = "font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--green);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--green-border);border-radius:4px;background:var(--green-bg);";
+        a.textContent = `${chemblId} ↗`;
+        linksDiv.appendChild(a);
+      }
+    } else if (cid) {
+      // No ChEMBL ID found — show PubChem as final fallback
+      const pubchemImgUrl = `/api/structure?cid=${cid}`;
+      window._structureImgUrl = pubchemImgUrl;
+      imgBox.innerHTML = `<img src="${pubchemImgUrl}" alt="${compound}" style="max-width:170px;max-height:130px;object-fit:contain;" />`;
+    } else {
+      imgBox.innerHTML = `<span style="font-size:11px;color:var(--ink4);">Structure unavailable</span>`;
+    }
   } catch(e) { /* silent */ }
 }
 
