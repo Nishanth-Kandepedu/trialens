@@ -868,6 +868,8 @@ function renderTrialCard(t, i) {
         <div class="dg-item"><div class="dg-label">Est. Completion</div><div class="dg-value">${t.completionDate||'—'}</div></div>
       </div>
 
+      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
+
       ${(t.interventions && t.interventions.length) ? `
         <div class="trial-outcome">
           <div class="outcome-label" style="margin-bottom:8px;">Interventions &amp; Dosing</div>
@@ -922,7 +924,6 @@ function renderTrialCard(t, i) {
             View full results on ClinicalTrials.gov ↗</a>
         </div>` : ''}
 
-      ${t.summary ? `<div class="trial-summary-text">${t.summary}</div>` : ''}
     </div>
   </div>`;
 }
@@ -2362,148 +2363,156 @@ function downloadNarrative(i) {
 
 function downloadTrial(i) {
   const t = currentTrials[i];
-  const sar = sarCache[i];
   const nct = t.nctId || t.id || 'NCT';
   const cond = Array.isArray(t.conditions) ? t.conditions.join(', ') : (t.conditions||'');
   const enroll = t.enrollment ? parseInt(t.enrollment).toLocaleString() + ' participants' : '—';
   const date = new Date().toLocaleDateString('en-GB', {day:'2-digit',month:'short',year:'numeric'});
 
-  function badge(txt, color) {
-    const colors = {blue:'#2a5f9e',green:'#2a7a52',gold:'#c8922a',red:'#c0392b',violet:'#6b4fa0',gray:'#7a756e'};
-    const bgs    = {blue:'rgba(42,95,158,.08)',green:'rgba(42,122,82,.08)',gold:'rgba(200,146,42,.08)',red:'rgba(192,57,43,.07)',violet:'rgba(107,79,160,.07)',gray:'#f3f0ea'};
-    const bds    = {blue:'rgba(42,95,158,.2)',green:'rgba(42,122,82,.2)',gold:'rgba(200,146,42,.2)',red:'rgba(192,57,43,.2)',violet:'rgba(107,79,160,.2)',gray:'#ddd9cf'};
-    return `<span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:.5px;padding:2px 8px;border-radius:3px;text-transform:uppercase;font-weight:500;background:${bgs[color]||bgs.gray};color:${colors[color]||colors.gray};border:1px solid ${bds[color]||bds.gray};">${txt}</span>`;
+  const thS = `padding:7px 12px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1px;text-transform:uppercase;color:#888;background:#f5f5f5;border-bottom:1px solid #e8e8e8;font-weight:500;`;
+  const tdS = `padding:9px 12px;border-bottom:1px solid #f0f0f0;color:#222;vertical-align:top;font-size:12.5px;`;
+  const secLbl = `font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:#888;padding-bottom:8px;border-bottom:1px solid #e8e8e8;margin-bottom:14px;`;
+  const secWrap = `margin-bottom:28px;`;
+
+  function pill(text, color, bg, border) {
+    return `<span style="font-family:'IBM Plex Mono',monospace;font-size:8px;padding:2px 7px;border-radius:3px;background:${bg};color:${color};border:1px solid ${border};font-weight:600;white-space:nowrap;">${text}</span>`;
   }
 
-  function ratingColor(r) { return r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a'; }
-  function ratingIcon(r)  { return r==='good'?'▲':r==='poor'?'▼':'●'; }
+  // Structure image
+  const structHtml = window._structureImgUrl ? `
+    <div style="float:right;margin:0 0 16px 24px;background:#f5f5f5;border:1px solid #e8e8e8;border-radius:10px;padding:12px;text-align:center;">
+      <img src="${window._structureImgUrl}" alt="${currentCompound}" style="width:130px;height:95px;object-fit:contain;display:block;" />
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#888;margin-top:6px;">${currentCompound}</div>
+    </div>` : '';
 
-  function tableHTML(headers, rows) {
-    const ths = headers.map(h=>`<th style="padding:9px 14px;text-align:left;font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:1.2px;text-transform:uppercase;color:#b5b0a8;background:var(--paper2);border-bottom:1px solid var(--paper3);font-weight:500;">${h}</th>`).join('');
-    const trs = rows.map(cells=>{
-      const tds = cells.map((c,ci)=>`<td style="padding:10px 14px;border-bottom:1px solid var(--paper2);font-size:12.5px;color:${ci===0?'var(--ink)':'var(--ink2)'};font-weight:${ci===0?'600':'400'};">${c}</td>`).join('');
-      return `<tr>${tds}</tr>`;
-    }).join('');
-    return `<table style="width:100%;border-collapse:collapse;background:var(--paper2);border:1px solid var(--paper3);border-radius:8px;overflow:hidden;"><thead><tr>${ths}</tr></thead><tbody>${trs}</tbody></table>`;
-  }
+  // Metadata grid — mirrors detail-grid
+  const metaHtml = `
+    <div style="display:grid;grid-template-columns:repeat(4,1fr);gap:12px;margin-bottom:20px;">
+      ${[['Lead Sponsor',t.sponsor||'—'],['Enrollment',enroll],['Start Date',t.startDate||'—'],['Est. Completion',t.completionDate||'—']]
+        .map(([l,v])=>`<div style="padding:10px 14px;background:#f5f5f5;border-radius:8px;border:1px solid #e8e8e8;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:8px;color:#888;letter-spacing:.5px;text-transform:uppercase;margin-bottom:4px;">${l}</div>
+          <div style="font-size:12.5px;font-weight:600;color:#0a0a0a;">${v}</div>
+        </div>`).join('')}
+    </div>`;
 
-  function section(title, accentColor, content) {
-    return `
-      <div style="margin-bottom:28px;">
-        <div style="display:flex;align-items:center;gap:8px;margin-bottom:14px;padding-bottom:10px;border-bottom:1px solid var(--paper3);">
-          <div style="width:3px;height:14px;background:${accentColor};border-radius:2px;flex-shrink:0;"></div>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#b5b0a8;">${title}</span>
-        </div>
-        ${content}
-      </div>`;
-  }
+  // Summary
+  const summaryHtml = t.summary ? `
+    <div style="${secWrap}">
+      <div style="font-size:13px;color:#444;line-height:1.75;background:#f5f5f5;border-radius:8px;padding:14px 16px;border:1px solid #e8e8e8;">${t.summary}</div>
+    </div>` : '';
 
-  function metaGrid(items) {
-    const cells = items.map(([label,val])=>`
-      <div style="padding:0 0 4px 0;">
-        <div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#b5b0a8;margin-bottom:3px;">${label}</div>
-        <div style="font-size:13px;font-weight:500;color:#0e0d0b;">${val}</div>
-      </div>`).join('');
-    return `<div style="display:grid;grid-template-columns:repeat(3,1fr);gap:16px 24px;">${cells}</div>`;
-  }
+  // Interventions
+  const interventionsHtml = (t.interventions && t.interventions.length) ? `
+    <div style="${secWrap}">
+      <div style="${secLbl}">Interventions &amp; Dosing</div>
+      ${t.interventions.map(iv=>`
+        <div style="margin-bottom:10px;">
+          <div style="display:flex;align-items:center;gap:8px;margin-bottom:3px;">
+            ${pill(iv.type||'DRUG','#b87c1a','rgba(184,124,26,0.08)','rgba(184,124,26,0.22)')}
+            <span style="font-size:13px;font-weight:600;color:#0a0a0a;">${iv.name}</span>
+          </div>
+          ${iv.desc ? `<div style="font-size:12px;color:#555;margin-left:2px;">${iv.desc}</div>` : ''}
+        </div>`).join('')}
+    </div>` : '';
 
-  // ── SAR sections ──
-  let sarHTML = '';
-  if (sar) {
-    // Potency table
-    const potRows = (sar.potency_table||[]).map(r=>[r.endpoint||'', `<strong>${r.value||''}</strong>`, r.unit||'', `<span style="color:#b5b0a8;">${r.assay||''}</span>`]);
-    sarHTML += section('In Vitro Binding', '#2a5f9e', tableHTML(['Endpoint','Value','Unit','Assay'], potRows));
+  // Outcomes
+  const outcomesHtml = (t.outcomes && t.outcomes.length) ? `
+    <div style="${secWrap}">
+      <div style="${secLbl}">Outcomes &amp; Measures</div>
+      ${t.outcomes.map(o=>`
+        <div style="display:flex;gap:8px;align-items:baseline;margin-bottom:8px;">
+          ${o.type==='primary'
+            ? pill('PRIMARY','#1a5eb5','rgba(26,94,181,0.07)','rgba(26,94,181,0.2)')
+            : pill('SECONDARY','#888','#f0f0f0','#e0e0e0')}
+          <span style="font-size:13px;color:#222;">${o.measure}${o.timeframe?`<span style="color:#888;font-size:11px;margin-left:6px;">${o.timeframe}</span>`:''}</span>
+        </div>`).join('')}
+    </div>` : '';
 
-    // Dose-response table
-    const drRows = (sar.dose_response||[]).map(r=>[
-      r.dose||'',
-      `<strong>${r.response_rate||0}%</strong>`,
-      `<span style="color:#c8922a;">Grade ${r.toxicity_grade||1}</span>`,
-      `<span style="color:#b5b0a8;">${r.notes||''}</span>`
-    ]);
-    sarHTML += section('Dose-Response', '#2a7a52', tableHTML(['Dose','Response Rate','Toxicity Grade','Notes'], drRows));
+  // Eligibility
+  const eligHtml = (t.eligibility && (t.eligibility.sex || t.eligibility.minAge || t.eligibility.criteria)) ? `
+    <div style="${secWrap}">
+      <div style="${secLbl}">Eligibility</div>
+      <div style="display:flex;gap:20px;margin-bottom:10px;flex-wrap:wrap;">
+        ${t.eligibility.sex ? `<span style="font-size:12px;color:#222;"><span style="color:#888;">Sex</span> ${t.eligibility.sex}</span>` : ''}
+        ${t.eligibility.minAge||t.eligibility.maxAge ? `<span style="font-size:12px;color:#222;"><span style="color:#888;">Age</span> ${t.eligibility.minAge||''}${t.eligibility.minAge&&t.eligibility.maxAge?' – ':''}${t.eligibility.maxAge||''}</span>` : ''}
+      </div>
+      ${t.eligibility.criteria ? `<div style="font-size:12px;color:#555;line-height:1.65;white-space:pre-line;">${t.eligibility.criteria.substring(0,400)}${t.eligibility.criteria.length>400?'…':''}</div>` : ''}
+    </div>` : '';
 
-    // ADMET table
-    const admetRows = (sar.admet||[]).map(r=>[
-      r.property||'',
-      `<span style="font-family:'IBM Plex Mono',monospace;font-size:11px;">${r.value||''}</span>`,
-      `<span style="color:${ratingColor(r.rating)};font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;">${ratingIcon(r.rating)} ${(r.rating||'').toUpperCase()}</span>`,
-      `<span style="color:#b5b0a8;">${r.notes||''}</span>`
-    ]);
-    sarHTML += section('ADMET Properties', '#6b4fa0', tableHTML(['Property','Value','Rating','Notes'], admetRows));
-
-    // Narrative
-    sarHTML += section('SAR Narrative', '#c8922a', `<div style="background:var(--paper);border:1px solid var(--paper3);border-left:3px solid var(--violet);border-radius:8px;padding:20px 24px;font-size:14px;line-height:1.8;color:var(--ink2);">${sar.summary||'—'}</div>`);
-  } else {
-    sarHTML += section('SAR Profile', '#ddd9cf', `<div style="background:var(--paper2);border:1px dashed #ddd9cf;border-radius:8px;padding:20px 24px;font-size:13px;color:#b5b0a8;font-family:'IBM Plex Mono',monospace;">SAR not yet generated. Open Drug Intelligence, expand this trial and click Generate SAR Profile.</div>`);
-  }
+  // Posted Results
+  const postedHtml = t.postedResults ? `
+    <div style="${secWrap}">
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:12px;">
+        <div style="${secLbl}margin-bottom:0;padding-bottom:0;border-bottom:none;">Posted Results</div>
+        ${pill('RESULTS AVAILABLE','#1a7a4a','rgba(26,122,74,0.08)','rgba(26,122,74,0.2)')}
+      </div>
+      ${(t.postedResults.measures||[]).map(m=>`
+        <div style="font-size:12px;color:#222;margin-bottom:5px;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#888;text-transform:uppercase;margin-right:6px;">${m.type}</span>${m.title}
+        </div>`).join('')}
+      <a href="https://clinicaltrials.gov/study/${nct}#results" target="_blank"
+        style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#1a5eb5;text-decoration:none;font-weight:600;display:inline-block;margin-top:8px;">
+        View full results on ClinicalTrials.gov ↗</a>
+    </div>` : '';
 
   const html = `<!DOCTYPE html>
 <html lang="en">
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width,initial-scale=1.0">
-<title>Drug Intelligence Report — ${currentCompound} · ${nct}</title>
-<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
+<title>Drug Intelligence — ${nct} · ${currentCompound}</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
 <style>
   *{margin:0;padding:0;box-sizing:border-box;}
-  body{background:#faf8f4;color:#0e0d0b;font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.55;-webkit-font-smoothing:antialiased;}
-  @media print{body{background:#fff;}.no-print{display:none!important;}}
+  body{background:#fff;color:#0a0a0a;font-family:'Inter',sans-serif;font-size:13.5px;line-height:1.55;-webkit-font-smoothing:antialiased;}
+  @media print{.no-print{display:none!important;}}
 </style>
 </head>
 <body>
-<div style="max-width:960px;margin:0 auto;">
+<div style="max-width:900px;margin:0 auto;padding:48px 40px;">
 
   <!-- Header -->
-  <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:40px;padding-bottom:24px;border-bottom:2px solid #0e0d0b;">
-    <div style="display:flex;align-items:center;gap:12px;">
-      <div style="width:32px;height:32px;background:#0e0d0b;clip-path:polygon(50% 0%,93% 25%,93% 75%,50% 100%,7% 75%,7% 25%);display:flex;align-items:center;justify-content:center;">
-        <span style="color:#faf8f4;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:700;letter-spacing:-0.5px;">Rx</span>
-      </div>
-      <div>
-        <div style="font-size:15px;font-weight:700;letter-spacing:-0.4px;">Drug Intelligence</div>
+  <div style="display:flex;align-items:flex-start;justify-content:space-between;margin-bottom:32px;padding-bottom:20px;border-bottom:2px solid #0a0a0a;">
+    <div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2.5px;text-transform:uppercase;color:#888;margin-bottom:6px;">Drug Intelligence · Clinical Trial Report</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:11px;color:#1a5eb5;font-weight:600;margin-bottom:8px;">${nct}</div>
+      <div style="font-size:22px;font-weight:700;letter-spacing:-.4px;line-height:1.25;color:#0a0a0a;max-width:680px;">${t.title||'Untitled'}</div>
+      <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:10px;">
+        ${t.phase ? pill(t.phase,'#1a5eb5','rgba(26,94,181,0.07)','rgba(26,94,181,0.2)') : ''}
+        ${t.status ? pill(t.status,'#888','#f0f0f0','#e0e0e0') : ''}
+        ${cond ? pill(cond.split(',')[0].trim(),'#888','#f0f0f0','#e0e0e0') : ''}
       </div>
     </div>
-    <div style="text-align:right;">
-      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#b5b0a8;letter-spacing:1px;margin-bottom:3px;">GENERATED</div>
-      <div style="font-size:13px;font-weight:500;color:#0e0d0b;">${date}</div>
+    <div style="text-align:right;flex-shrink:0;margin-left:24px;">
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#888;">Drug Intelligence</div>
+      <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#888;margin-top:2px;">${date}</div>
+      <button class="no-print" onclick="window.print()" style="margin-top:10px;padding:6px 14px;background:#0a0a0a;color:#fff;border:none;border-radius:6px;font-size:11px;cursor:pointer;">Print / Save PDF</button>
     </div>
   </div>
 
-  <!-- Title block -->
-  <div style="margin-bottom:32px;">
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:#2a5f9e;letter-spacing:1px;margin-bottom:8px;">${nct}</div>
-    <div style="font-size:26px;font-weight:700;letter-spacing:-0.6px;color:#0e0d0b;line-height:1.2;margin-bottom:14px;">${t.title||'Untitled'}</div>
-    <div style="display:flex;flex-wrap:wrap;gap:6px;margin-bottom:16px;">
-      ${t.phase ? badge(t.phase,'blue') : ''}
-      ${t.status ? badge(t.status, t.status.toLowerCase().includes('complet')?'gray':t.status.toLowerCase().includes('recruit')?'green':'gold') : ''}
-      ${t.source ? badge(t.source, 'blue') : ''}
-      ${cond ? badge(cond.split(',')[0].trim(),'gray') : ''}
-    </div>
-  </div>
+  <!-- Structure float + Metadata -->
+  ${structHtml}
+  ${metaHtml}
+  <div style="clear:both;"></div>
 
-  <!-- Trial metadata -->
-  ${section('Trial Overview', '#2a5f9e', metaGrid([
-    ['Compound', currentCompound],
-    ['Lead Sponsor', t.sponsor||'—'],
-    ['Enrollment', enroll],
-    ['Start Date', t.startDate||'—'],
-    ['Est. Completion', t.completionDate||'—'],
-    ['Condition(s)', cond||'—'],
-  ]) + (t.primaryOutcome ? `<div style="margin-top:16px;"><div style="font-family:'IBM Plex Mono',monospace;font-size:8.5px;letter-spacing:1.5px;text-transform:uppercase;color:#b5b0a8;margin-bottom:5px;">Primary Outcome</div><div style="font-size:13.5px;color:#3a3730;">${t.primaryOutcome}</div></div>` : '')
-  + (t.summary ? `<div style="margin-top:14px;background:var(--paper2);border:1px solid var(--paper3);border-radius:8px;padding:12px 16px;font-size:13.5px;color:var(--ink3);line-height:1.7;">${t.summary}</div>` : ''))}
+  <!-- Summary -->
+  ${summaryHtml}
 
-  <!-- SAR -->
-  ${sarHTML}
+  <!-- Interventions -->
+  ${interventionsHtml}
+
+  <!-- Outcomes -->
+  ${outcomesHtml}
+
+  <!-- Eligibility -->
+  ${eligHtml}
+
+  <!-- Posted Results -->
+  ${postedHtml}
 
   <!-- Footer -->
-  <div style="margin-top:48px;padding-top:20px;border-top:1px solid #ebe7de;display:flex;align-items:center;justify-content:space-between;">
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;letter-spacing:.5px;">AI-generated · Research reference only · Verify against primary literature</div>
-    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#b5b0a8;">Drug Intelligence</div>
-  </div>
-
-  <div class="no-print" style="margin-top:24px;text-align:center;">
-    <button onclick="window.print()" style="background:#0e0d0b;color:#faf8f4;border:none;padding:10px 24px;border-radius:8px;font-family:'Inter',sans-serif;font-size:13px;font-weight:600;cursor:pointer;">Print / Save as PDF</button>
+  <div style="margin-top:48px;padding-top:16px;border-top:1px solid #e8e8e8;display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:8px;">
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#aaa;">Source: ClinicalTrials.gov · drugintelligence.bio</div>
+    <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:#aaa;">For research reference only · Verify against primary literature</div>
   </div>
 
 </div>
@@ -2517,6 +2526,8 @@ function downloadTrial(i) {
   a.click();
   showToast(`Downloaded report for ${nct}`);
 }
+
+
 
 function clearResults() {
   document.getElementById('results-area').style.display = 'none';

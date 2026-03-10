@@ -169,6 +169,10 @@ def fetch_trials(compound):
         status   = p.get("statusModule", {})
         design   = p.get("designModule", {})
         desc     = p.get("descriptionModule", {})
+        desc     = desc if isinstance(desc, dict) else {}
+        brief_summary = desc.get("briefSummary","").strip()
+        detailed_desc = desc.get("detailedDescription","").strip()
+        summary = brief_summary or detailed_desc[:600] if detailed_desc else brief_summary
         sponsor  = p.get("sponsorCollaboratorsModule", {})
         conds    = p.get("conditionsModule", {})
         outcomes = p.get("outcomesModule", {})
@@ -246,7 +250,7 @@ def fetch_trials(compound):
             "enrollment":     enroll_info.get("count","") if isinstance(enroll_info, dict) else "",
             "startDate":      start_struct.get("date","") if isinstance(start_struct, dict) else "",
             "completionDate": comp_struct.get("date","") if isinstance(comp_struct, dict) else "",
-            "summary":        desc.get("briefSummary","") if isinstance(desc, dict) else "",
+            "summary":        summary,
             "primaryOutcome": primary_outcome,
             "outcomes":       all_outcomes,
             "interventions":  interventions,
