@@ -756,8 +756,8 @@ function renderResults(compound, trials, totalCount) {
     });
   const sources = [...new Set(trials.map(t=>t.source).filter(Boolean))];
   const trialsSub = isCapped
-    ? `${showing} newest shown · ${total.toLocaleString()} total`
-    : `${total.toLocaleString()} total found`;
+    ? `${showing} newest shown`
+    : `total found`;
   document.getElementById('metrics-strip').innerHTML = `
     <div class="metric-card mc-blue"><div class="mc-label">Trials Found</div><div class="mc-value">${total.toLocaleString()}</div><div class="mc-sub">${trialsSub}</div></div>
     <div class="metric-card mc-green"><div class="mc-label">Total Enrolled</div><div class="mc-value">${totalEnroll>0?totalEnroll.toLocaleString():'—'}</div><div class="mc-sub">across ${showing} shown trials</div></div>
@@ -1154,8 +1154,8 @@ function renderSARResults(i, sar) {
     <div class="sar-tabs">
       <div class="sar-tab active" onclick="switchTab(${i},'potency',this)">In Vitro</div>
       <div class="sar-tab" onclick="switchTab(${i},'invivo',this)">In Vivo</div>
-      <div class="sar-tab" onclick="switchTab(${i},'dose',this)">Dose-Response</div>
       <div class="sar-tab" onclick="switchTab(${i},'admet',this)">ADMET</div>
+      <div class="sar-tab" onclick="switchTab(${i},'dose',this)">Dose-Response</div>
       <div class="sar-tab" onclick="switchTab(${i},'narrative',this)">SAR Narrative</div>
     </div>
     <div class="sar-tab-content active" id="tab-${i}-potency">${renderPotency(i, sar)}</div>
