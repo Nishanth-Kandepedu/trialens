@@ -1246,8 +1246,10 @@ function renderPotency(i, sar) {
       <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
     </div>`).join('');
 
+  const sourceOrder = {'ChEMBL':0,'PubChem BioAssay':1,'PubChem':2};
   const tableRows = rows
     .filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-'))
+    .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
     .map(r => {
       const docRef = r.ref || r.chembl_assay_id || '';
       const assayLink = docRef
@@ -1335,6 +1337,7 @@ function renderDose(i, sar) {
 
 function renderAdmet(i, sar) {
   const rows = (sar.admet||[]).filter(r => r.value && r.value !== 'Not available' && r.value !== 'N/A');
+  const sourceOrder = {'ChEMBL':0,'PubChem BioAssay':1,'PubChem':2};
   const pc = sar.physicochemical || null;
   const rmap = {good:3, moderate:2, poor:1};
   const barColor = r => r==='good'?'#2a7a52':r==='poor'?'#c0392b':'#c8922a';
@@ -1367,6 +1370,7 @@ function renderAdmet(i, sar) {
   };
   const admetRowsArr = rows
     .filter(r => hasVerifiedSource(r.source))
+    .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
     .map(r => `<tr>
       <td style="font-weight:600;color:var(--ink2);">${r.property||''}</td>
       <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>

@@ -414,29 +414,49 @@ def fetch_real_sar_data(compound):
         if chembl_id:
             result["chembl_id"] = chembl_id
 
-            # Potency data
+            # Potency data — paginate through all results
             try:
-                act_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50&format=json&limit=100&order_by=pchembl_value"
-                act_data = http_get(act_url)
-                for a in act_data.get("activities", []):
-                    val = a.get("standard_value")
-                    if val:
-                        result["bioactivity"].append({
-                            "type": a.get("standard_type", ""),
-                            "value": val,
-                            "unit": a.get("standard_units", ""),
-                            "assay": (a.get("assay_description") or "")[:80],
-                            "reference": a.get("document_chembl_id", ""),
-                            "source": "ChEMBL",
-                            "assay_category": "potency"
-                        })
+                offset = 0
+                page_size = 200
+                max_records = 1000
+                potency_count = 0
+                while potency_count < max_records:
+                    act_url = (f"https://www.ebi.ac.uk/chembl/api/data/activity"
+                               f"?molecule_chembl_id={chembl_id}"
+                               f"&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50"
+                               f"&format=json&limit={page_size}&offset={offset}"
+                               f"&order_by=pchembl_value")
+                    act_data = http_get(act_url)
+                    activities = act_data.get("activities", [])
+                    if not activities:
+                        break
+                    for a in activities:
+                        val = a.get("standard_value")
+                        if val:
+                            result["bioactivity"].append({
+                                "type":           a.get("standard_type", ""),
+                                "value":          val,
+                                "unit":           a.get("standard_units", ""),
+                                "assay":          (a.get("assay_description") or "")[:120],
+                                "target":         (a.get("target_pref_name") or "")[:80],
+                                "reference":      a.get("document_chembl_id", ""),
+                                "source":         "ChEMBL",
+                                "assay_category": "potency"
+                            })
+                            potency_count += 1
+                    # Check if more pages exist
+                    page_meta = act_data.get("page_meta", {})
+                    if not page_meta.get("next"):
+                        break
+                    offset += page_size
+                print(f"[ChEMBL] potency records fetched: {potency_count}", flush=True)
             except Exception as e:
                 result["chembl_potency_error"] = str(e)
-                print(f"[ChEMBL] potency fetch BLOCKED: {e}", flush=True)
+                print(f"[ChEMBL] potency fetch error: {e}", flush=True)
 
             # ADME assays (assay_type=A covers ADME in ChEMBL)
             try:
-                adme_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=A&format=json&limit=50"
+                adme_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=A&format=json&limit=200"
                 adme_data = http_get(adme_url)
                 for a in adme_data.get("activities", []):
                     val = a.get("standard_value")
@@ -458,7 +478,7 @@ def fetch_real_sar_data(compound):
 
             # Toxicity assays (assay_type=T)
             try:
-                tox_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=T&format=json&limit=20"
+                tox_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=T&format=json&limit=100"
                 tox_data = http_get(tox_url)
                 for a in tox_data.get("activities", []):
                     val = a.get("standard_value")
