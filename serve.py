@@ -172,52 +172,60 @@ def fetch_trials(compound):
         phases   = design.get("phases", [])
         phase_str = normalise_phase(phases[0] if phases else "")
         raw_status = status.get("overallStatus","")
-        primary_outcomes   = outcomes.get("primaryOutcomes", [])
-        secondary_outcomes = outcomes.get("secondaryOutcomes", [])
-        primary_outcome    = primary_outcomes[0].get("measure","") if primary_outcomes else ""
+        primary_outcomes   = outcomes.get("primaryOutcomes", []) if isinstance(outcomes, dict) else []
+        secondary_outcomes = outcomes.get("secondaryOutcomes", []) if isinstance(outcomes, dict) else []
+        primary_outcome    = primary_outcomes[0].get("measure","") if primary_outcomes and isinstance(primary_outcomes[0], dict) else ""
         # All measures with timeframe
         all_outcomes = []
         for o in primary_outcomes[:3]:
+            if not isinstance(o, dict): continue
             m = o.get("measure","").strip()
             tf = o.get("timeFrame","").strip()
             if m: all_outcomes.append({"type":"primary","measure":m,"timeframe":tf})
         for o in secondary_outcomes[:4]:
+            if not isinstance(o, dict): continue
             m = o.get("measure","").strip()
             tf = o.get("timeFrame","").strip()
             if m: all_outcomes.append({"type":"secondary","measure":m,"timeframe":tf})
 
         # Interventions — dose, route, arm descriptions
         arms_module = p.get("armsInterventionsModule", {})
+        arms_module = arms_module if isinstance(arms_module, dict) else {}
         interventions = []
         for iv in arms_module.get("interventions", [])[:4]:
-            desc = iv.get("description","").strip()
+            if not isinstance(iv, dict): continue
+            desc = (iv.get("description") or "").strip()
             interventions.append({
-                "name":  iv.get("name","").strip(),
-                "type":  iv.get("type","").strip(),
-                "desc":  desc[:200] if desc else "",
+                "name": (iv.get("name") or "").strip(),
+                "type": (iv.get("type") or "").strip(),
+                "desc": desc[:200],
             })
 
         # Eligibility — age, sex, key criteria
         elig = p.get("eligibilityModule", {})
+        elig = elig if isinstance(elig, dict) else {}
         eligibility = {
             "minAge":   elig.get("minimumAge",""),
             "maxAge":   elig.get("maximumAge",""),
             "sex":      elig.get("sex",""),
-            "criteria": elig.get("eligibilityCriteria","")[:600] if elig.get("eligibilityCriteria") else "",
+            "criteria": (elig.get("eligibilityCriteria") or "")[:600],
         }
 
         # Posted results — if available
         results_section = study.get("resultsSection", {})
+        results_section = results_section if isinstance(results_section, dict) else {}
         posted_results = None
         if results_section:
-            outcome_measures = results_section.get("outcomeMeasuresModule", {}).get("outcomeMeasures", [])
-            baseline = results_section.get("baselineCharacteristicsModule", {})
-            adverse  = results_section.get("adverseEventsModule", {})
-            if outcome_measures or baseline or adverse:
+            om_module = results_section.get("outcomeMeasuresModule", {})
+            om_module = om_module if isinstance(om_module, dict) else {}
+            outcome_measures = om_module.get("outcomeMeasures", [])
+            adverse = results_section.get("adverseEventsModule", {})
+            adverse = adverse if isinstance(adverse, dict) else {}
+            if outcome_measures:
                 posted_results = {
                     "hasResults": True,
                     "measures": [{"title": om.get("title",""), "type": om.get("type","")}
-                                 for om in outcome_measures[:4]],
+                                 for om in outcome_measures[:4] if isinstance(om, dict)],
                     "totalAE": adverse.get("totalNumberOfParticipants",""),
                 }
 
