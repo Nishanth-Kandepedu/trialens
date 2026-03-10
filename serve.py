@@ -161,7 +161,10 @@ def fetch_trials(compound):
     data   = http_get("https://clinicaltrials.gov/api/v2/studies?" + params)
     trials = []
     for study in data.get("studies", []):
+      try:
+        if not isinstance(study, dict): continue
         p = study.get("protocolSection", {})
+        if not isinstance(p, dict): continue
         ident    = p.get("identificationModule", {})
         status   = p.get("statusModule", {})
         design   = p.get("designModule", {})
@@ -229,24 +232,33 @@ def fetch_trials(compound):
                     "totalAE": adverse.get("totalNumberOfParticipants",""),
                 }
 
+        lead_sponsor = sponsor.get("leadSponsor", {}) if isinstance(sponsor, dict) else {}
+        enroll_info  = design.get("enrollmentInfo", {}) if isinstance(design, dict) else {}
+        start_struct = status.get("startDateStruct", {}) if isinstance(status, dict) else {}
+        comp_struct  = status.get("primaryCompletionDateStruct", {}) if isinstance(status, dict) else {}
         trials.append({
-            "nctId":        ident.get("nctId",""),
-            "title":        ident.get("briefTitle",""),
-            "status":       raw_status.replace("_"," ").title(),
-            "phase":        phase_str,
-            "conditions":   conds.get("conditions",[])[:3],
-            "sponsor":      sponsor.get("leadSponsor",{}).get("name",""),
-            "enrollment":   design.get("enrollmentInfo",{}).get("count",""),
-            "startDate":    status.get("startDateStruct",{}).get("date",""),
-            "completionDate": status.get("primaryCompletionDateStruct",{}).get("date",""),
-            "summary":      desc.get("briefSummary",""),
-            "primaryOutcome":  primary_outcome,
-            "outcomes":        all_outcomes,
-            "interventions":   interventions,
-            "eligibility":     eligibility,
-            "postedResults":   posted_results,
-            "source":       "ClinicalTrials.gov",
+            "nctId":          ident.get("nctId","") if isinstance(ident, dict) else "",
+            "title":          ident.get("briefTitle","") if isinstance(ident, dict) else "",
+            "status":         raw_status.replace("_"," ").title(),
+            "phase":          phase_str,
+            "conditions":     (conds.get("conditions",[]) if isinstance(conds, dict) else [])[:3],
+            "sponsor":        lead_sponsor.get("name","") if isinstance(lead_sponsor, dict) else "",
+            "enrollment":     enroll_info.get("count","") if isinstance(enroll_info, dict) else "",
+            "startDate":      start_struct.get("date","") if isinstance(start_struct, dict) else "",
+            "completionDate": comp_struct.get("date","") if isinstance(comp_struct, dict) else "",
+            "summary":        desc.get("briefSummary","") if isinstance(desc, dict) else "",
+            "primaryOutcome": primary_outcome,
+            "outcomes":       all_outcomes,
+            "interventions":  interventions,
+            "eligibility":    eligibility,
+            "postedResults":  posted_results,
+            "source":         "ClinicalTrials.gov",
         })
+      except Exception as e:
+        import traceback
+        print(f"[Trials] skipping study due to error: {e}", flush=True)
+        traceback.print_exc()
+        continue
     return trials, total_count
 
 def fetch_pubchem_properties(compound):
