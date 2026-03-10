@@ -1145,41 +1145,18 @@ function switchTab(i, tab, el) {
 function srcBadgeHtml(src) {
   if (!src) return '';
   const s = src.trim();
-
-  // Recognise known source strings
-  const isChEMBL   = /^chembl$/i.test(s) || /CHEMBL\d+/i.test(s);
-  const isPubChem   = /^pubchem/i.test(s) || /CID\s*\d+/i.test(s);
-  const isClinical  = /ClinicalTrials|NCT\d+/i.test(s);
-  const isKnown     = isChEMBL || isPubChem || isClinical;
-
-  if (!isKnown) {
-    return '<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:var(--paper2);color:var(--ink3);border:1px solid var(--paper3);font-weight:600;">' + s + '</span>';
+  const isChEMBL  = /^chembl/i.test(s) || /CHEMBL\d+/i.test(s);
+  const isPubChem = /^pubchem/i.test(s) || /CID\s*\d+/i.test(s);
+  const sc = isChEMBL ? 'var(--blue)' : isPubChem ? 'var(--green)' : 'var(--ink3)';
+  const bg = isChEMBL ? 'var(--blue-bg)' : isPubChem ? 'var(--green-bg)' : 'var(--paper2)';
+  const br = isChEMBL ? 'var(--blue-border)' : isPubChem ? 'var(--green-border)' : 'var(--paper3)';
+  const label = isChEMBL ? 'ChEMBL' : isPubChem ? 'PubChem' : s;
+  // Link to doc ref if it looks like a ChEMBL doc ID
+  const chemblDoc = s.match(/^(CHEMBL\d+)$/i);
+  if (chemblDoc) {
+    return `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${s.toUpperCase()}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 8px;border-radius:3px;background:${bg};color:${sc};border:1px solid ${br};font-weight:600;white-space:nowrap;text-decoration:none;">${s.toUpperCase()} ↗</a>`;
   }
-
-  const sc = isChEMBL ? '#2a5f9e' : isPubChem ? '#2a7a52' : '#6b4fa0';
-
-  // ChEMBL compound card link
-  const chemblCompound = s.match(/^CHEMBL(\d+)$/i);
-  if (chemblCompound) {
-    return `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${s.toUpperCase()}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${s.toUpperCase()} ↗</a>`;
-  }
-
-  // ChEMBL document ref (e.g. "CHEMBL2040800" inside a longer string)
-  const chemblDocMatch = s.match(/CHEMBL(\d{6,})/i);
-  if (chemblDocMatch) {
-    const id = 'CHEMBL' + chemblDocMatch[1];
-    return `<a href="https://www.ebi.ac.uk/chembl/document_report_card/${id}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">${id} ↗</a>`;
-  }
-
-  // PubChem CID
-  const pubchemMatch = s.match(/CID\s*(\d+)/i);
-  if (pubchemMatch) {
-    return `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${pubchemMatch[1]}" target="_blank" style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}12;color:${sc};border:1px solid ${sc}22;font-weight:600;white-space:nowrap;text-decoration:none;">PubChem CID ${pubchemMatch[1]} ↗</a>`;
-  }
-
-  // Plain source label (e.g. "ChEMBL", "PubChem BioAssay")
-  const label = isChEMBL ? 'ChEMBL' : isPubChem ? s : s;
-  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 7px;border-radius:3px;background:${sc}15;color:${sc};border:1px solid ${sc}30;font-weight:600;white-space:nowrap;">${label}</span>`;
+  return `<span style="font-family:IBM Plex Mono,monospace;font-size:9px;padding:2px 8px;border-radius:3px;background:${bg};color:${sc};border:1px solid ${br};font-weight:600;white-space:nowrap;">${label}</span>`;
 }
 
 function paginatedTable(rowsArr, tableId, pageSize=10) {
@@ -1260,6 +1237,7 @@ function renderPotency(i, sar) {
         <td class="p-value">${r.value||''}</td>
         <td class="p-unit">${r.unit||''}</td>
         <td class="p-assay">${r.assay||''}</td>
+        <td style="font-size:11px;color:var(--ink3);">${r.bio_source||'—'}</td>
         <td style="white-space:nowrap;">${assayLink}</td>
       </tr>`;
     });  // Keep as array for pagination
@@ -1279,7 +1257,7 @@ function renderPotency(i, sar) {
     ${realRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
     <table class="potency-table">
-      <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Source</th></tr></thead>
+      <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Biological Source</th><th>Source</th></tr></thead>
       ${potPaged.paginated ? potPaged.body : '<tbody>' + potPaged.body + '</tbody>'}
     </table>
     ${potPaged.controls}
@@ -1374,6 +1352,7 @@ function renderAdmet(i, sar) {
     .map(r => `<tr>
       <td style="font-weight:600;color:var(--ink2);">${r.property||''}</td>
       <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
+      <td style="font-size:11px;color:var(--ink3);">${r.bio_source||'—'}</td>
       <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
       <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
       <td style="color:var(--ink3);font-size:12px;">${r.notes||''}</td>
@@ -1390,7 +1369,7 @@ function renderAdmet(i, sar) {
     <div class="admet-score-grid">${scorecards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
       <table class="potency-table">
-        <thead><tr><th>Property</th><th>Value</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Property</th><th>Value</th><th>Biological Source</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
         ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
       </table>
       ${admetPageCtrl}

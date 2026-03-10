@@ -433,12 +433,17 @@ def fetch_real_sar_data(compound):
                     for a in activities:
                         val = a.get("standard_value")
                         if val:
+                            organism = a.get("assay_organism") or a.get("target_organism") or ""
+                            cell     = a.get("cell_name") or ""
+                            tissue   = a.get("tissue_name") or ""
+                            bio_src  = " · ".join(filter(None, [organism, cell, tissue]))
                             result["bioactivity"].append({
                                 "type":           a.get("standard_type", ""),
                                 "value":          val,
                                 "unit":           a.get("standard_units", ""),
                                 "assay":          (a.get("assay_description") or "")[:120],
                                 "target":         (a.get("target_pref_name") or "")[:80],
+                                "bio_source":     bio_src,
                                 "reference":      a.get("document_chembl_id", ""),
                                 "source":         "ChEMBL",
                                 "assay_category": "potency"
@@ -462,11 +467,16 @@ def fetch_real_sar_data(compound):
                     val = a.get("standard_value")
                     atype = a.get("standard_type", "")
                     if val and atype:
+                        organism = a.get("assay_organism") or a.get("target_organism") or ""
+                        cell     = a.get("cell_name") or ""
+                        tissue   = a.get("tissue_name") or ""
+                        bio_src  = " · ".join(filter(None, [organism, cell, tissue]))
                         entry = {
                             "type": atype,
                             "value": val,
                             "unit": a.get("standard_units", ""),
                             "assay": (a.get("assay_description") or "")[:80],
+                            "bio_source": bio_src,
                             "reference": a.get("document_chembl_id", ""),
                             "source": "ChEMBL",
                             "assay_category": "ADME"
@@ -484,11 +494,16 @@ def fetch_real_sar_data(compound):
                     val = a.get("standard_value")
                     atype = a.get("standard_type", "")
                     if val and atype:
+                        organism = a.get("assay_organism") or a.get("target_organism") or ""
+                        cell     = a.get("cell_name") or ""
+                        tissue   = a.get("tissue_name") or ""
+                        bio_src  = " · ".join(filter(None, [organism, cell, tissue]))
                         entry = {
                             "type": atype,
                             "value": val,
                             "unit": a.get("standard_units", ""),
                             "assay": (a.get("assay_description") or "")[:80],
+                            "bio_source": bio_src,
                             "reference": a.get("document_chembl_id", ""),
                             "source": "ChEMBL",
                             "assay_category": "toxicity"
