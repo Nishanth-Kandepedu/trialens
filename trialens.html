@@ -1153,11 +1153,13 @@ function renderSARResults(i, sar) {
     </div>
     <div class="sar-tabs">
       <div class="sar-tab active" onclick="switchTab(${i},'potency',this)">Binding</div>
+      <div class="sar-tab" onclick="switchTab(${i},'invivo',this)">In Vivo</div>
       <div class="sar-tab" onclick="switchTab(${i},'dose',this)">Dose-Response</div>
       <div class="sar-tab" onclick="switchTab(${i},'admet',this)">ADMET</div>
       <div class="sar-tab" onclick="switchTab(${i},'narrative',this)">SAR Narrative</div>
     </div>
     <div class="sar-tab-content active" id="tab-${i}-potency">${renderPotency(i, sar)}</div>
+    <div class="sar-tab-content" id="tab-${i}-invivo" style="display:none;">${renderInVivo(i, sar)}</div>
     <div class="sar-tab-content" id="tab-${i}-dose" style="display:none;">${renderDose(i, sar)}</div>
     <div class="sar-tab-content" id="tab-${i}-admet" style="display:none;">${renderAdmet(i, sar)}</div>
     <div class="sar-tab-content" id="tab-${i}-narrative" style="display:none;">${renderNarrative(i, sar)}</div>`;
@@ -1173,6 +1175,20 @@ function switchTab(i, tab, el) {
   el.classList.add('active');
   const content = document.getElementById('tab-'+i+'-'+tab);
   if (content) { content.classList.add('active'); content.style.display = 'block'; }
+}
+
+function switchBindingTab(tabsId, idx, el) {
+  // Update tab styles
+  const bar = document.getElementById(tabsId);
+  if (!bar) return;
+  bar.querySelectorAll('.b-inner-tab').forEach((t,j) => {
+    t.style.borderBottom = j===idx ? '2px solid var(--blue)' : '2px solid transparent';
+    t.style.color = j===idx ? 'var(--blue)' : 'var(--ink3)';
+  });
+  // Show/hide panels
+  document.querySelectorAll(`.b-inner-panel[data-tabs="${tabsId}"]`).forEach(p => {
+    p.style.display = parseInt(p.dataset.idx)===idx ? '' : 'none';
+  });
 }
 
 function srcBadgeHtml(src) {
@@ -1273,8 +1289,18 @@ function renderPotency(i, sar) {
       <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
     </div>`).join('');
 
-  // One clean sub-table per endpoint group
-  const subTables = orderedGroups.map((grp, gi) => {
+  // Inner tab bar — one tab per endpoint group
+  const bTabId = `b-tabs-${i}`;
+  const innerTabsHTML = orderedGroups.map((grp, gi) =>
+    `<div class="b-inner-tab${gi===0?' active':''}" onclick="switchBindingTab('${bTabId}',${gi},this)"
+      style="padding:6px 14px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+      letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${gi===0?'var(--blue)':'transparent'};
+      color:${gi===0?'var(--blue)':'var(--ink3)'};white-space:nowrap;transition:all .15s;">
+      ${grp} <span style="font-size:9px;opacity:.7;">(${groups[grp].length})</span>
+    </div>`
+  ).join('');
+
+  const innerPanelsHTML = orderedGroups.map((grp, gi) => {
     const grpRows = groups[grp];
     const rowsArr = grpRows.map(r => {
       const docRef = r.reference || r.ref || '';
@@ -1287,23 +1313,13 @@ function renderPotency(i, sar) {
       </tr>`;
     });
     const paged = paginatedTable(rowsArr, `pot-${i}-${gi}`);
-    return `
-      <div style="margin-bottom:16px;">
-        <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;
-          background:var(--paper2);border:1px solid var(--paper3);border-radius:8px 8px 0 0;">
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
-            letter-spacing:.5px;color:var(--ink);">${grp}</span>
-          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink4);">
-            ${grpRows.length} measurement${grpRows.length!==1?'s':''}</span>
-        </div>
-        <div style="border:1px solid var(--paper3);border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">
-          <table class="potency-table">
-            <thead><tr><th>Value</th><th>Unit</th><th>Assay</th><th>Source</th></tr></thead>
-            ${paged.paginated ? paged.body : '<tbody>' + paged.body + '</tbody>'}
-          </table>
-          ${paged.controls}
-        </div>
-      </div>`;
+    return `<div class="b-inner-panel" data-tabs="${bTabId}" data-idx="${gi}" style="${gi===0?'':'display:none;'}">
+      <table class="potency-table">
+        <thead><tr><th>Value</th><th>Unit</th><th>Assay</th><th>Source</th></tr></thead>
+        ${paged.paginated ? paged.body : '<tbody>' + paged.body + '</tbody>'}
+      </table>
+      ${paged.controls}
+    </div>`;
   }).join('');
 
   const rd = sar._realData || {};
@@ -1317,7 +1333,120 @@ function renderPotency(i, sar) {
   return `
     <div class="sec-lbl">Binding Data</div>
     ${noPotency}
-    ${validRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>${subTables}` : ''}`;
+    ${validRows.length ? `
+    <div class="stat-cards stat-cards-4">${cards}</div>
+    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
+      <div id="${bTabId}" style="display:flex;align-items:flex-end;gap:0;padding:0 8px;
+        background:var(--paper2);border-bottom:1px solid var(--paper3);overflow-x:auto;">
+        ${innerTabsHTML}
+      </div>
+      <div style="padding:0;">${innerPanelsHTML}</div>
+    </div>` : ''}`;
+}
+
+function renderInVivo(i, sar) {
+  const rd = sar._realData || {};
+  const rows = (rd.invivo_data || []).filter(r =>
+    r.value && r.value !== 'Not available' && r.value !== 'N/A'
+  ).sort((a, b) => {
+    const pa = parseFloat(a.pchembl_value ?? -Infinity);
+    const pb = parseFloat(b.pchembl_value ?? -Infinity);
+    return pb - pa;
+  });
+
+  if (!rows.length) return `
+    <div class="sec-lbl">In Vivo Efficacy</div>
+    <div style="padding:24px;color:var(--ink3);font-size:13px;">
+      No in vivo efficacy data found in ChEMBL for this compound.
+      ${rd.chembl_id ? '' : '<br><span style="font-size:11px;color:#c0392b;font-family:IBM Plex Mono,monospace;">ChEMBL lookup did not return a compound ID.</span>'}
+    </div>`;
+
+  // Group by endpoint type
+  const groups = {};
+  const groupOrder = ['ED50','AUC','Cmax','T1/2','Tmax','MED','MTD','LD50','IC50','EC50'];
+  rows.forEach(r => {
+    const key = (r.type||'Other').toUpperCase();
+    const grp = groupOrder.find(g => key.includes(g)) || r.type || 'Other';
+    if (!groups[grp]) groups[grp] = [];
+    groups[grp].push(r);
+  });
+  const orderedGroups = [
+    ...groupOrder.filter(g => groups[g]),
+    ...Object.keys(groups).filter(g => !groupOrder.includes(g))
+  ];
+
+  // Species pill
+  const SP_COLOR = { 'Human':'#1a5eb5', 'Rat':'#1a7a4a', 'Mouse':'#7a4a1a' };
+  const spPill = sp => {
+    if (!sp) return '';
+    const col = SP_COLOR[sp] || '#6b4fa0';
+    return `<span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;
+      font-weight:600;padding:2px 7px;border-radius:10px;background:${col}18;color:${col};
+      border:1px solid ${col}30;white-space:nowrap;">${sp}</span>`;
+  };
+
+  // Summary cards
+  const primary = rows[0] || {};
+  const speciesSeen = [...new Set(rows.map(r=>r.species).filter(Boolean))];
+  const cardDefs = [
+    { label: primary.type||'Primary', value: primary.value, unit: primary.unit||'', sub: 'Most active in vivo', pct: 90, color: '#2a5f9e' },
+    { label: 'Models', value: speciesSeen.length||1, unit: '', sub: speciesSeen.join(', ')||'Unspecified', pct: 60, color: '#1a7a4a' },
+    { label: 'Endpoints', value: orderedGroups.length, unit: '', sub: orderedGroups.join(' · '), pct: 70, color: '#c8922a' },
+    { label: 'Records', value: rows.length, unit: '', sub: 'Total in vivo assays', pct: Math.min((rows.length/20)*100,100), color: '#6b4fa0' },
+  ].filter(Boolean).slice(0,4);
+
+  const cards = cardDefs.map(c=>`
+    <div class="stat-card">
+      <div class="stat-card-label">${c.label}</div>
+      <div class="stat-card-value">${c.value}<span style="font-size:13px;font-weight:400;color:var(--ink3);margin-left:4px;">${c.unit}</span></div>
+      <div class="stat-card-sub">${c.sub}</div>
+      <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
+    </div>`).join('');
+
+  // Inner tab bar per endpoint group
+  const bTabId = `iv-tabs-${i}`;
+  const innerTabsHTML = orderedGroups.map((grp, gi) =>
+    `<div class="b-inner-tab${gi===0?' active':''}" onclick="switchBindingTab('${bTabId}',${gi},this)"
+      style="padding:6px 14px;font-family:'IBM Plex Mono',monospace;font-size:10px;font-weight:600;
+      letter-spacing:.5px;cursor:pointer;border-bottom:2px solid ${gi===0?'var(--blue)':'transparent'};
+      color:${gi===0?'var(--blue)':'var(--ink3)'};white-space:nowrap;transition:all .15s;">
+      ${grp} <span style="font-size:9px;opacity:.7;">(${groups[grp].length})</span>
+    </div>`
+  ).join('');
+
+  const innerPanelsHTML = orderedGroups.map((grp, gi) => {
+    const grpRows = groups[grp];
+    const rowsArr = grpRows.map(r => {
+      const docRef = r.reference || '';
+      const sourceBadge = (docRef && /^CHEMBL\d+$/i.test(docRef)) ? srcBadgeHtml(docRef) : srcBadgeHtml(r.source);
+      return `<tr>
+        <td style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;">${r.value||''}</td>
+        <td style="color:var(--ink3);">${r.unit||''}</td>
+        <td style="white-space:nowrap;">${spPill(r.species)}</td>
+        <td style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,100)}</td>
+        <td style="white-space:nowrap;">${sourceBadge}</td>
+      </tr>`;
+    });
+    const paged = paginatedTable(rowsArr, `iv-${i}-${gi}`);
+    return `<div class="b-inner-panel" data-tabs="${bTabId}" data-idx="${gi}" style="${gi===0?'':'display:none;}">
+      <table class="potency-table">
+        <thead><tr><th>Value</th><th>Unit</th><th>Species</th><th>Assay</th><th>Source</th></tr></thead>
+        ${paged.paginated ? paged.body : '<tbody>' + paged.body + '</tbody>'}
+      </table>
+      ${paged.controls}
+    </div>`;
+  }).join('');
+
+  return `
+    <div class="sec-lbl">In Vivo Efficacy</div>
+    <div class="stat-cards stat-cards-4">${cards}</div>
+    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
+      <div id="${bTabId}" style="display:flex;align-items:flex-end;gap:0;padding:0 8px;
+        background:var(--paper2);border-bottom:1px solid var(--paper3);overflow-x:auto;">
+        ${innerTabsHTML}
+      </div>
+      <div>${innerPanelsHTML}</div>
+    </div>`;
 }
 
 function renderDose(i, sar) {
@@ -1426,17 +1555,9 @@ function renderAdmet(i, sar) {
     })
     .sort((a,b) => (sourceOrder[a.source]??9) - (sourceOrder[b.source]??9))
     .map(r => {
-      let sp = r.species || '';
-      if (!sp) {
-        const prop = (r.property||'').toLowerCase();
-        if (prop.includes('human')) sp = 'Human';
-        else if (prop.includes('rat')) sp = 'Rat';
-        else if (prop.includes('mouse') || prop.includes('murine')) sp = 'Mouse';
-      }
-      const spStr = sp ? `<span style="font-size:10px;color:var(--ink3);font-style:italic;">${sp}</span>` : '';
       return `<tr>
         <td style="font-weight:600;color:var(--ink2);font-size:13px;">${r.property||''}</td>
-        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span> ${spStr}</td>
+        <td style="font-family:'IBM Plex Mono',monospace;font-size:12px;">${r.value||''} <span style="color:var(--ink3);font-size:11px;">${r.unit||''}</span></td>
         <td style="white-space:nowrap;">${srcBadgeHtml(r.source)}</td>
         <td><span class="${rc(r.rating)}" style="font-size:11px;">${ri(r.rating)} ${(r.rating||'').toUpperCase()}</span></td>
         <td style="color:var(--ink3);font-size:12px;">${r.notes||''}</td>
@@ -1454,7 +1575,7 @@ function renderAdmet(i, sar) {
     <div class="admet-score-grid">${scorecards}</div>
     <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
       <table class="potency-table">
-        <thead><tr><th>Property</th><th>Value · Species</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
+        <thead><tr><th>Property</th><th>Value</th><th>Source</th><th>Rating</th><th>Notes</th></tr></thead>
         ${admetPaged.paginated ? admetPaged.body : '<tbody>' + admetPaged.body + '</tbody>'}
       </table>
       ${admetPageCtrl}

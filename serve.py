@@ -536,6 +536,35 @@ def fetch_real_sar_data(compound):
             except Exception:
                 pass
 
+            # In vivo efficacy assays (assay_type=F — functional/animal models)
+            try:
+                invivo_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=F&format=json&limit=200&order_by=pchembl_value"
+                invivo_data = http_get(invivo_url)
+                result["invivo_data"] = []
+                for a in invivo_data.get("activities", []):
+                    val = a.get("standard_value")
+                    atype = a.get("standard_type", "")
+                    if val and atype:
+                        raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                        species = norm_species(raw_sp) or species_from_desc(
+                            a.get("assay_description"), a.get("target_pref_name"))
+                        pchembl = a.get("pchembl_value")
+                        result["invivo_data"].append({
+                            "type":          atype,
+                            "value":         val,
+                            "unit":          a.get("standard_units", ""),
+                            "pchembl_value": float(pchembl) if pchembl else None,
+                            "assay":         (a.get("assay_description") or "")[:120],
+                            "target":        (a.get("target_pref_name") or "")[:80],
+                            "species":       species,
+                            "reference":     a.get("document_chembl_id", ""),
+                            "source":        "ChEMBL",
+                            "assay_category":"in_vivo"
+                        })
+                print(f"[ChEMBL] in vivo records: {len(result['invivo_data'])}", flush=True)
+            except Exception as e:
+                result["invivo_error"] = str(e)
+
             result["sources"].append("ChEMBL (" + chembl_id + ")")
     except Exception as e:
         result["chembl_error"] = str(e)
