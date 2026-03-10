@@ -1428,7 +1428,7 @@ function renderInVivo(i, sar) {
       </tr>`;
     });
     const paged = paginatedTable(rowsArr, `iv-${i}-${gi}`);
-    return `<div class="b-inner-panel" data-tabs="${bTabId}" data-idx="${gi}" style="${gi===0?'':'display:none;}">
+    return `<div class="b-inner-panel" data-tabs="${bTabId}" data-idx="${gi}" style="${gi===0?'':'display:none;'}">
       <table class="potency-table">
         <thead><tr><th>Value</th><th>Unit</th><th>Species</th><th>Assay</th><th>Source</th></tr></thead>
         ${paged.paginated ? paged.body : '<tbody>' + paged.body + '</tbody>'}
