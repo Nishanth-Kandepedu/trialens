@@ -170,9 +170,16 @@ def fetch_trials(compound):
         design   = p.get("designModule", {})
         desc     = p.get("descriptionModule", {})
         desc     = desc if isinstance(desc, dict) else {}
-        brief_summary = desc.get("briefSummary","").strip()
-        detailed_desc = desc.get("detailedDescription","").strip()
-        summary = brief_summary or detailed_desc[:600] if detailed_desc else brief_summary
+        def clean_nct_text(t, maxlen=1200):
+            import re
+            t = (t or "").strip()
+            t = re.sub(r'\\([>*#\[\]()])', r'\1', t)  # unescape markdown
+            t = re.sub(r'\r\n|\r', '\n', t)
+            t = re.sub(r'\n{3,}', '\n\n', t)
+            return t[:maxlen] + ('…' if len(t) > maxlen else '')
+        brief_summary = clean_nct_text(desc.get("briefSummary", ""))
+        detailed_desc = clean_nct_text(desc.get("detailedDescription", ""), 800)
+        summary = brief_summary or detailed_desc
         sponsor  = p.get("sponsorCollaboratorsModule", {})
         conds    = p.get("conditionsModule", {})
         outcomes = p.get("outcomesModule", {})
@@ -215,7 +222,7 @@ def fetch_trials(compound):
             "minAge":   elig.get("minimumAge",""),
             "maxAge":   elig.get("maximumAge",""),
             "sex":      elig.get("sex",""),
-            "criteria": (elig.get("eligibilityCriteria") or "")[:600],
+            "criteria": clean_nct_text(elig.get("eligibilityCriteria") or "", 600),
         }
 
         # Posted results — if available

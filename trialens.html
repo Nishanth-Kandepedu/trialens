@@ -2563,13 +2563,25 @@ async function renderCompoundStructure(compound) {
     window._structureProps = props;
     window._structureCompound = compound;
 
-    // Fetch ChEMBL ID immediately so we use ChEMBL SVG from the start
+    // Fetch ChEMBL ID — try pref_name first, then full-text search
     let chemblId = null;
     try {
-      const chRes = await fetch(`https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=${encodeURIComponent(compound)}&format=json&limit=1`);
-      if (chRes.ok) {
+      const BASE = 'https://www.ebi.ac.uk/chembl/api/data';
+      const urls = [
+        `${BASE}/molecule?pref_name__iexact=${encodeURIComponent(compound)}&format=json&limit=3`,
+        `${BASE}/molecule/search?q=${encodeURIComponent(compound)}&format=json&limit=5`,
+      ];
+      for (const url of urls) {
+        const chRes = await fetch(url);
+        if (!chRes.ok) continue;
         const chData = await chRes.json();
-        chemblId = chData?.molecules?.[0]?.molecule_chembl_id || null;
+        const mols = chData?.molecules || [];
+        if (!mols.length) continue;
+        // Pick best match — exact pref_name first, then first result
+        const ql = compound.toLowerCase().trim();
+        const exact = mols.find(m => (m.pref_name||'').toLowerCase().trim() === ql);
+        chemblId = (exact || mols[0])?.molecule_chembl_id || null;
+        if (chemblId) break;
       }
     } catch(e) { /* fall through to PubChem */ }
 
