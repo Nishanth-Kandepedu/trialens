@@ -1231,44 +1231,15 @@ function tablePage(tid, size, dir) {
 function renderPotency(i, sar) {
   const rows = (sar.potency_table||[]);
 
-  // Species pill — short canonical label + colour
-  const SP_COLOR = { 'Human':'#1a5eb5', 'Rat':'#1a7a4a', 'Mouse':'#7a4a1a' };
-  const spPill = sp => {
-    if (!sp) return '';
-    const col = SP_COLOR[sp] || '#555';
-    return `<span style="display:inline-block;font-family:'IBM Plex Mono',monospace;font-size:9px;font-weight:600;
-      letter-spacing:.5px;padding:2px 7px;border-radius:10px;background:${col}18;color:${col};
-      border:1px solid ${col}30;white-space:nowrap;">${sp}</span>`;
-  };
-
   // Valid rows only, sorted most-potent first (highest pchembl_value = lowest IC50)
   const validRows = rows.filter(r =>
     r.value && r.value !== 'Not available' && r.value !== 'N/A' && !String(r.value).includes('-')
   ).sort((a, b) => {
     const pa = parseFloat(a.pchembl_value ?? -Infinity);
     const pb = parseFloat(b.pchembl_value ?? -Infinity);
-    if (pb !== pa) return pb - pa;                    // pchembl desc
-    return parseFloat(a.value) - parseFloat(b.value); // raw value asc as tiebreak
+    if (pb !== pa) return pb - pa;
+    return parseFloat(a.value) - parseFloat(b.value);
   });
-
-  // Summary cards — most potent endpoint + hERG + count
-  const primary = validRows[0] || {};
-  const herg = validRows.find(r => /herg/i.test(r.endpoint||''));
-  const bestHuman = validRows.find(r => r.species === 'Human');
-  const cardDefs = validRows.length === 0 ? [] : [
-    primary.value ? { label: primary.endpoint||'Primary', value: primary.value, unit: primary.unit||'', sub: primary.species ? `Most potent · ${primary.species}` : 'Most potent', pct: 95, color: '#2a5f9e' } : null,
-    bestHuman && bestHuman !== primary ? { label: bestHuman.endpoint, value: bestHuman.value, unit: bestHuman.unit||'', sub: 'Best human assay', pct: 80, color: '#1a5eb5' } : null,
-    herg ? { label: 'hERG IC50', value: herg.value, unit: herg.unit||'', sub: 'Cardiac safety', pct: 30, color: '#c0392b' } : null,
-    validRows.length > 1 ? { label: 'Measurements', value: validRows.length, unit: '', sub: 'Total binding assays', pct: Math.min((validRows.length/20)*100,100), color: '#6b4fa0' } : null,
-  ].filter(Boolean).slice(0,4);
-
-  const cards = cardDefs.map(c=>`
-    <div class="stat-card">
-      <div class="stat-card-label">${c.label}</div>
-      <div class="stat-card-value">${c.value}<span style="font-size:13px;font-weight:400;color:var(--ink3);margin-left:4px;">${c.unit}</span></div>
-      <div class="stat-card-sub">${c.sub}</div>
-      <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
-    </div>`).join('');
 
   // Group by endpoint type
   const groups = {};
@@ -1284,29 +1255,56 @@ function renderPotency(i, sar) {
     ...Object.keys(groups).filter(g => !groupOrder.includes(g))
   ];
 
-  // Build rows — grouped with a subtle group header row
-  const tableRowsArr = [];
-  orderedGroups.forEach(grp => {
+  // Summary cards
+  const primary = validRows[0] || {};
+  const herg = validRows.find(r => /herg/i.test(r.endpoint||''));
+  const cardDefs = validRows.length === 0 ? [] : [
+    primary.value ? { label: primary.endpoint||'Primary', value: primary.value, unit: primary.unit||'', sub: 'Most potent', pct: 95, color: '#2a5f9e' } : null,
+    herg ? { label: 'hERG IC50', value: herg.value, unit: herg.unit||'', sub: 'Cardiac safety', pct: 30, color: '#c0392b' } : null,
+    orderedGroups.length > 1 ? { label: 'Endpoint Types', value: orderedGroups.length, unit: '', sub: orderedGroups.join(' · '), pct: Math.min((orderedGroups.length/5)*100,100), color: '#c8922a' } : null,
+    validRows.length > 1 ? { label: 'Measurements', value: validRows.length, unit: '', sub: 'Total binding assays', pct: Math.min((validRows.length/20)*100,100), color: '#6b4fa0' } : null,
+  ].filter(Boolean).slice(0,4);
+
+  const cards = cardDefs.map(c=>`
+    <div class="stat-card">
+      <div class="stat-card-label">${c.label}</div>
+      <div class="stat-card-value">${c.value}<span style="font-size:13px;font-weight:400;color:var(--ink3);margin-left:4px;">${c.unit}</span></div>
+      <div class="stat-card-sub">${c.sub}</div>
+      <div class="stat-card-bar-wrap"><div class="stat-card-bar" style="width:${Math.min(c.pct,100)}%;background:${c.color};"></div></div>
+    </div>`).join('');
+
+  // One clean sub-table per endpoint group
+  const subTables = orderedGroups.map((grp, gi) => {
     const grpRows = groups[grp];
-    // Group header
-    tableRowsArr.push(`<tr>
-      <td colspan="5" style="padding:10px 16px 6px;font-family:'IBM Plex Mono',monospace;font-size:9px;
-        letter-spacing:1.2px;text-transform:uppercase;color:var(--ink4);background:var(--paper2);
-        border-bottom:1px solid var(--paper3);">${grp}</td>
-    </tr>`);
-    grpRows.forEach(r => {
+    const rowsArr = grpRows.map(r => {
       const docRef = r.reference || r.ref || '';
       const sourceBadge = (docRef && /^CHEMBL\d+$/i.test(docRef)) ? srcBadgeHtml(docRef) : srcBadgeHtml(r.source);
-      tableRowsArr.push(`<tr>
-        <td class="p-endpoint" style="padding-left:20px;">${r.endpoint||''}</td>
-        <td class="p-value" style="font-weight:700;">${r.value||''}</td>
-        <td class="p-unit">${r.unit||''}</td>
-        <td class="p-assay" style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,80)}</td>
-        <td style="white-space:nowrap;">${spPill(r.species)}</td>
+      return `<tr>
+        <td class="p-value" style="font-family:'IBM Plex Mono',monospace;font-weight:700;font-size:13px;">${r.value||''}</td>
+        <td class="p-unit" style="color:var(--ink3);">${r.unit||''}</td>
+        <td class="p-assay" style="font-size:11px;color:var(--ink3);">${(r.assay||'').substring(0,100)}</td>
         <td style="white-space:nowrap;">${sourceBadge}</td>
-      </tr>`);
+      </tr>`;
     });
-  });
+    const paged = paginatedTable(rowsArr, `pot-${i}-${gi}`);
+    return `
+      <div style="margin-bottom:16px;">
+        <div style="display:flex;align-items:center;gap:10px;padding:9px 16px;
+          background:var(--paper2);border:1px solid var(--paper3);border-radius:8px 8px 0 0;">
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:11px;font-weight:700;
+            letter-spacing:.5px;color:var(--ink);">${grp}</span>
+          <span style="font-family:'IBM Plex Mono',monospace;font-size:10px;color:var(--ink4);">
+            ${grpRows.length} measurement${grpRows.length!==1?'s':''}</span>
+        </div>
+        <div style="border:1px solid var(--paper3);border-top:none;border-radius:0 0 8px 8px;overflow:hidden;background:var(--paper);">
+          <table class="potency-table">
+            <thead><tr><th>Value</th><th>Unit</th><th>Assay</th><th>Source</th></tr></thead>
+            ${paged.paginated ? paged.body : '<tbody>' + paged.body + '</tbody>'}
+          </table>
+          ${paged.controls}
+        </div>
+      </div>`;
+  }).join('');
 
   const rd = sar._realData || {};
   const lookupLog = rd.chembl_lookup_log ? rd.chembl_lookup_log.join(' | ') : '';
@@ -1316,19 +1314,10 @@ function renderPotency(i, sar) {
     ${lookupLog ? `<details style="margin-top:8px;"><summary style="font-size:11px;cursor:pointer;color:var(--ink3);">Debug log</summary><pre style="font-size:10px;color:var(--ink3);white-space:pre-wrap;margin-top:4px;">${lookupLog}</pre></details>` : ''}
   </div>` : '';
 
-  const potPaged = validRows.length ? paginatedTable(tableRowsArr, 'pot-'+i) : null;
-
   return `
     <div class="sec-lbl">Binding Data</div>
     ${noPotency}
-    ${validRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>
-    <div style="border:1px solid var(--paper3);border-radius:8px;overflow:hidden;background:var(--paper);">
-    <table class="potency-table">
-      <thead><tr><th>Endpoint</th><th>Value</th><th>Unit</th><th>Assay</th><th>Species</th><th>Source</th></tr></thead>
-      ${potPaged.paginated ? potPaged.body : '<tbody>' + potPaged.body + '</tbody>'}
-    </table>
-    ${potPaged.controls}
-    </div>` : ''}`;
+    ${validRows.length ? `<div class="stat-cards stat-cards-4">${cards}</div>${subTables}` : ''}`;
 }
 
 function renderDose(i, sar) {
