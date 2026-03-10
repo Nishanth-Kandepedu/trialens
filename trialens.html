@@ -560,6 +560,7 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
         </button>
       </div>
     </div>
+    <div id="compound-structure-panel" style="display:none;margin-bottom:24px;"></div>
     <div class="metrics-strip" id="metrics-strip"></div>
     <div id="compound-sar-panel" style="margin-bottom:28px;"></div>
     <div id="trials-list"></div>
@@ -602,11 +603,11 @@ body { background: var(--paper); color: var(--ink); font-family: 'Inter', sans-s
     </div>
     <div class="about-card">
       <div class="about-card-title ac-green">Data Sources</div>
-      <p><b>ClinicalTrials.gov</b> — NIH/FDA global trial registry. Trial metadata, phases, outcomes and descriptions are fetched live.<br><br><b>ChEMBL</b> — EMBL-EBI bioactivity database. IC50, EC50, Ki, and binding assay values are retrieved directly.<br><br><b>PubChem</b> — NCBI compound database. Molecular weight, LogP, TPSA, HBD/HBA, and rotatable bonds are fetched per compound.<br><br><b>Claude AI</b> — Anthropic claude-opus-4-5. Used to synthesise and interpret the above real data, and to cite relevant published literature.</p>
+      <p><b>ClinicalTrials.gov</b> — NIH/FDA global trial registry. Trial metadata, phases, outcomes, interventions, eligibility criteria and posted results are fetched live.<br><br><b>ChEMBL</b> — EMBL-EBI bioactivity database. IC50, EC50, Ki, Kd, and in vivo values are retrieved directly, classified into In Vitro and In Vivo tabs.<br><br><b>PubChem</b> — NCBI compound database. Molecular structure, formula, MW, LogP, TPSA, HBD/HBA and rotatable bonds are fetched per compound.<br><br><b>Claude AI</b> — Anthropic claude-opus-4-5. Used only to synthesise the SAR narrative from real database values. All tables are populated directly from ChEMBL and PubChem.</p>
     </div>
     <div class="about-card">
-      <div class="about-card-title ac-violet">SAR Outputs</div>
-      <p><b>In Vitro Bioactivity</b> — Real IC50/EC50/Ki/Kd values from ChEMBL, supplemented with published literature citations.<br><br><b>Dose-Response</b> — AI-synthesised cohort response rates and toxicity grades based on clinical trial context.<br><br><b>ADMET</b> — Physicochemical properties from PubChem (MW, LogP, TPSA) with AI-interpreted bioavailability, half-life, CYP, hERG, and BBB ratings citing published PK studies.<br><br><b>SAR Narrative</b> — AI-generated pharmacology summary grounded in real database values and literature.</p>
+      <div class="about-card-title ac-violet">What You Get</div>
+      <p><b>Compound Structure</b> — 2D structure image, molecular formula, IUPAC name and MW auto-loaded on every search from PubChem.<br><br><b>In Vitro Bioactivity</b> — Real IC50/EC50/Ki/Kd values from ChEMBL, tabbed by endpoint type.<br><br><b>In Vivo Efficacy</b> — Animal model PK and efficacy endpoints (AUC, Cmax, T½, ED50) from ChEMBL assay_type=F data.<br><br><b>ADMET</b> — Absorption, Distribution, Metabolism, Excretion and Toxicity data from ChEMBL, rated good/moderate/poor.<br><br><b>SAR Narrative</b> — AI-generated pharmacology summary grounded in real database values.<br><br><b>Trial Detail</b> — Interventions &amp; dosing, outcomes &amp; measures, eligibility criteria, and posted results per NCT record.</p>
     </div>
     <div class="about-card">
       <div class="about-card-title ac-gold">Disclaimer</div>
@@ -746,6 +747,7 @@ function renderResults(compound, trials, totalCount) {
   const isCapped = total > showing;
 
   document.getElementById('results-title').innerHTML = `Results for <em>${compound}</em>`;
+  renderCompoundStructure(compound);
 
   // Metrics
   const totalEnroll = trials.reduce((s,t) => s+(parseInt(t.enrollment)||0), 0);
@@ -2506,8 +2508,65 @@ function clearResults() {
   document.getElementById('search-input').value = '';
   const csarPanel = document.getElementById('compound-sar-panel');
   if (csarPanel) { csarPanel.style.display = 'none'; csarPanel.innerHTML = ''; }
+  const structPanel = document.getElementById('compound-structure-panel');
+  if (structPanel) { structPanel.style.display = 'none'; structPanel.innerHTML = ''; }
   compoundSarCache = null;
   currentCompound = ''; currentTrials = []; sarCache = {};
+}
+
+async function renderCompoundStructure(compound) {
+  const panel = document.getElementById('compound-structure-panel');
+  if (!panel) return;
+  panel.style.display = 'none';
+  panel.innerHTML = '';
+
+  try {
+    // 1. Resolve CID from name
+    const cidRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(compound)}/cids/JSON`);
+    if (!cidRes.ok) return;
+    const cidData = await cidRes.json();
+    const cid = cidData?.IdentifierList?.CID?.[0];
+    if (!cid) return;
+
+    // 2. Fetch compound properties (formula, IUPAC name)
+    const propRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/property/MolecularFormula,IUPACName,MolecularWeight/JSON`);
+    const propData = propRes.ok ? await propRes.json() : null;
+    const props = propData?.PropertyTable?.Properties?.[0] || {};
+
+    // 3. SVG URL (PubChem serves these directly — no auth needed)
+    const svgUrl = `https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/${cid}/PNG?image_size=300x200`;
+
+    // Format molecular formula with subscripts
+    const formula = (props.MolecularFormula || '').replace(/(\d+)/g, '<sub>$1</sub>');
+    const iupac = props.IUPACName || '';
+    const mw = props.MolecularWeight || '';
+
+    panel.style.display = 'block';
+    panel.innerHTML = `
+      <div style="border:1px solid var(--paper3);border-radius:12px;background:var(--paper);overflow:hidden;display:flex;align-items:center;gap:0;">
+        <!-- Structure image -->
+        <div style="padding:20px 24px;background:var(--paper2);border-right:1px solid var(--paper3);display:flex;align-items:center;justify-content:center;min-width:180px;">
+          <img src="${svgUrl}" alt="Structure of ${compound}"
+            style="max-width:160px;max-height:120px;object-fit:contain;"
+            onerror="this.parentElement.innerHTML='<div style=\\'font-family:\\'IBM Plex Mono\\',monospace;font-size:10px;color:var(--ink4);text-align:center;\\'>Structure<br>unavailable</div>'" />
+        </div>
+        <!-- Compound info -->
+        <div style="padding:18px 24px;flex:1;">
+          <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;">Compound</div>
+          <div style="font-size:17px;font-weight:700;color:var(--ink);letter-spacing:-.3px;margin-bottom:8px;">${compound}</div>
+          ${formula ? `<div style="font-size:13px;color:var(--ink2);margin-bottom:4px;">${formula}${mw ? ` &nbsp;·&nbsp; <span style="color:var(--ink3);">MW ${mw} Da</span>` : ''}</div>` : ''}
+          ${iupac ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;line-height:1.5;margin-top:6px;max-width:500px;">${iupac}</div>` : ''}
+          <div style="display:flex;gap:10px;margin-top:12px;">
+            <a href="https://pubchem.ncbi.nlm.nih.gov/compound/${cid}" target="_blank"
+              style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--blue);text-decoration:none;font-weight:600;padding:3px 8px;border:1px solid var(--blue-border);border-radius:4px;background:var(--blue-bg);">
+              PubChem CID ${cid} ↗
+            </a>
+          </div>
+        </div>
+      </div>`;
+  } catch(e) {
+    // Silent fail — structure is optional enhancement
+  }
 }
 
 // ── CLAUDE API ─────────────────────────────────────────────────
