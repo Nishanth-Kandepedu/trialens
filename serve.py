@@ -170,15 +170,17 @@ def fetch_trials(compound):
         design   = p.get("designModule", {})
         desc     = p.get("descriptionModule", {})
         desc     = desc if isinstance(desc, dict) else {}
-        def clean_nct_text(t, maxlen=1200):
+        def clean_nct_text(t, maxlen=None):
             import re
             t = (t or "").strip()
             t = re.sub(r'\\([>*#\[\]()])', r'\1', t)  # unescape markdown
             t = re.sub(r'\r\n|\r', '\n', t)
             t = re.sub(r'\n{3,}', '\n\n', t)
-            return t[:maxlen] + ('…' if len(t) > maxlen else '')
-        brief_summary = clean_nct_text(desc.get("briefSummary", ""), 4000)
-        detailed_desc = clean_nct_text(desc.get("detailedDescription", ""), 4000)
+            if maxlen and len(t) > maxlen:
+                return t[:maxlen] + '…'
+            return t
+        brief_summary = clean_nct_text(desc.get("briefSummary", ""))
+        detailed_desc = clean_nct_text(desc.get("detailedDescription", ""))
         summary = brief_summary or detailed_desc
         sponsor  = p.get("sponsorCollaboratorsModule", {})
         conds    = p.get("conditionsModule", {})
@@ -229,7 +231,7 @@ def fetch_trials(compound):
             "minAge":   clean_age(elig.get("minimumAge","")),
             "maxAge":   clean_age(elig.get("maximumAge","")),
             "sex":      str(elig.get("sex","")).strip()[:20],
-            "criteria": clean_nct_text(elig.get("eligibilityCriteria") or "", 4000),
+            "criteria": clean_nct_text(elig.get("eligibilityCriteria") or ""),
         }
 
         # Posted results — if available
@@ -536,7 +538,7 @@ def fetch_real_sar_data(compound):
                 while potency_count < max_records:
                     act_url = (f"https://www.ebi.ac.uk/chembl/api/data/activity"
                                f"?molecule_chembl_id={chembl_id}"
-                               f"&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50"
+                               f"&standard_type__in=IC50,Ki,EC50,Kd,GI50,MIC,CC50,AC50,Potency,ED50,ID50,Inhibition,% Inhibition"
                                f"&format=json&limit={page_size}&offset={offset}"
                                f"&order_by=pchembl_value")
                     act_data = http_get(act_url)
@@ -569,6 +571,37 @@ def fetch_real_sar_data(compound):
                         break
                     offset += page_size
                 print(f"[ChEMBL] potency records fetched: {potency_count}", flush=True)
+
+                # Fallback for biologics/antibodies: if no filtered results, fetch all activity
+                if potency_count == 0:
+                    try:
+                        fallback_url = (f"https://www.ebi.ac.uk/chembl/api/data/activity"
+                                        f"?molecule_chembl_id={chembl_id}"
+                                        f"&format=json&limit=200&offset=0")
+                        fallback_data = http_get(fallback_url)
+                        fallback_acts = fallback_data.get("activities", [])
+                        print(f"[ChEMBL] fallback all-activity: {len(fallback_acts)} records", flush=True)
+                        for a in fallback_acts:
+                            val = a.get("standard_value")
+                            if val:
+                                raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
+                                species = norm_species(raw_sp) or species_from_desc(
+                                    a.get("assay_description"), a.get("target_pref_name"))
+                                pchembl = a.get("pchembl_value")
+                                result["bioactivity"].append({
+                                    "type":           a.get("standard_type", ""),
+                                    "value":          val,
+                                    "unit":           a.get("standard_units", ""),
+                                    "pchembl_value":  float(pchembl) if pchembl else None,
+                                    "assay":          (a.get("assay_description") or "")[:120],
+                                    "target":         (a.get("target_pref_name") or "")[:80],
+                                    "species":        species,
+                                    "reference":      a.get("document_chembl_id", ""),
+                                    "source":         "ChEMBL",
+                                    "assay_category": "potency"
+                                })
+                    except Exception as e:
+                        print(f"[ChEMBL] fallback fetch error: {e}", flush=True)
             except Exception as e:
                 result["chembl_potency_error"] = str(e)
                 print(f"[ChEMBL] potency fetch error: {e}", flush=True)
@@ -811,17 +844,18 @@ class Handler(BaseHTTPRequestHandler):
             img_bytes = None
             content_type = "image/png"
 
-            # If ChEMBL ID provided directly, fetch that image — clean white background
+            # If ChEMBL ID provided directly, fetch that image — clean white background SVG
             if chembl_id:
                 try:
-                    url = f"https://www.ebi.ac.uk/chembl/api/data/image/{chembl_id}?engine=indigo&format=png"
-                    req = urllib.request.Request(url, headers={"User-Agent": "DrugIntelligence/1.0"})
+                    # Correct ChEMBL image endpoint — returns SVG, no format param needed
+                    url = f"https://www.ebi.ac.uk/chembl/api/data/image/{chembl_id}"
+                    req = urllib.request.Request(url, headers={"User-Agent": "Mozilla/5.0"})
                     with urllib.request.urlopen(req, timeout=10) as r:
                         img_bytes = r.read()
-                        content_type = "image/png"
-                    print(f"[Structure] ChEMBL {chembl_id} OK ({len(img_bytes)} bytes)", flush=True)
+                        content_type = r.headers.get("Content-Type", "image/svg+xml").split(";")[0].strip()
+                    print(f"[Structure] ChEMBL {chembl_id} OK ({len(img_bytes)} bytes, {content_type})", flush=True)
                 except Exception as e:
-                    print(f"[Structure] ChEMBL {chembl_id} failed: {e}", flush=True)
+                    print(f"[Structure] ChEMBL {chembl_id} FAILED: {e}", flush=True)
 
             # Fallback or initial load: PubChem PNG
             if not img_bytes and cid:
