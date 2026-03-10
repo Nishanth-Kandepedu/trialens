@@ -1148,17 +1148,6 @@ Return ONLY valid JSON.`,
     };
     compoundSarCache = sar;
 
-    // Upgrade structure panel with ChEMBL SVG — use SAR-resolved ID or early-fetched one
-    const chId = realData.chembl_id || window._structureChemblIdEarly;
-    if (chId && window._structureCID) {
-      renderStructurePanel(
-        currentCompound,
-        window._structureCID,
-        window._structureProps || {},
-        chId
-      );
-    }
-
     // Render into panel — same tab system but no Dose-Response
     panel.innerHTML = `
       <div style="border:1px solid var(--paper3);border-radius:12px;overflow:hidden;background:var(--paper);">
@@ -2588,7 +2577,7 @@ async function renderCompoundStructure(compound) {
   panel.innerHTML = '';
 
   try {
-    // Resolve PubChem CID + properties
+    // Get PubChem properties for formula/IUPAC display
     const cidRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(compound)}/cids/JSON`);
     if (!cidRes.ok) return;
     const cidData = await cidRes.json();
@@ -2601,46 +2590,18 @@ async function renderCompoundStructure(compound) {
 
     window._structureCID = cid;
     window._structureProps = props;
-    window._structureCompound = compound;
 
-    // Fetch ChEMBL ID — try pref_name first, then full-text search
-    let chemblId = null;
-    try {
-      const BASE = 'https://www.ebi.ac.uk/chembl/api/data';
-      const urls = [
-        `${BASE}/molecule?pref_name__iexact=${encodeURIComponent(compound)}&format=json&limit=3`,
-        `${BASE}/molecule/search?q=${encodeURIComponent(compound)}&format=json&limit=5`,
-      ];
-      for (const url of urls) {
-        const chRes = await fetch(url);
-        if (!chRes.ok) continue;
-        const chData = await chRes.json();
-        const mols = chData?.molecules || [];
-        if (!mols.length) continue;
-        // Pick best match — exact pref_name first, then first result
-        const ql = compound.toLowerCase().trim();
-        const exact = mols.find(m => (m.pref_name||'').toLowerCase().trim() === ql);
-        chemblId = (exact || mols[0])?.molecule_chembl_id || null;
-        if (chemblId) break;
-      }
-    } catch(e) { /* fall through to PubChem */ }
+    // Use server proxy — pass compound name, server resolves ChEMBL ID using its robust lookup
+    const imgUrl = `/api/structure?compound=${encodeURIComponent(compound)}&cid=${cid}`;
+    window._structureImgUrl = imgUrl;
 
-    window._structureChemblIdEarly = chemblId;
-    renderStructurePanel(compound, cid, props, chemblId);
+    renderStructurePanel(compound, cid, props, imgUrl);
   } catch(e) { /* silent fail */ }
 }
 
-function renderStructurePanel(compound, cid, props, chemblId) {
+function renderStructurePanel(compound, cid, props, imgUrl) {
   const panel = document.getElementById('compound-structure-panel');
   if (!panel) return;
-
-  // Always use our server proxy — avoids CORS issues with ChEMBL image API
-  const imgUrl = chemblId
-    ? `/api/structure?chembl_id=${encodeURIComponent(chemblId)}&cid=${cid||''}`
-    : `/api/structure?cid=${cid||''}`;
-
-  window._structureImgUrl = imgUrl;
-  window._structureChemblId = chemblId;
 
   const formula = (props?.MolecularFormula || '').replace(/(\d+)/g, '<sub>$1</sub>');
   const iupac = props?.IUPACName || '';
@@ -2652,19 +2613,17 @@ function renderStructurePanel(compound, cid, props, chemblId) {
       <div style="padding:20px 28px;background:var(--paper2);border-right:1px solid var(--paper3);display:flex;align-items:center;justify-content:center;min-width:200px;">
         <img src="${imgUrl}" alt="Structure of ${compound}"
           style="max-width:170px;max-height:130px;object-fit:contain;"
-          onerror="this.src='/api/structure?cid=${cid}'" />
+          onerror="this.style.display='none'" />
       </div>
       <div style="padding:20px 28px;flex:1;display:flex;flex-direction:column;justify-content:center;">
         <div style="font-family:'IBM Plex Mono',monospace;font-size:9px;letter-spacing:2px;text-transform:uppercase;color:var(--ink4);margin-bottom:6px;">Compound</div>
         <div style="font-size:18px;font-weight:700;color:var(--ink);letter-spacing:-.3px;margin-bottom:8px;">${compound}</div>
-        ${formula ? `<div style="font-size:13px;color:var(--ink2);margin-bottom:4px;">${formula}${mw?` &nbsp;·&nbsp; <span style="color:var(--ink3);">MW ${mw} Da</span>`:''}</div>` : ''}
+        ${formula ? `<div style="font-size:13px;color:var(--ink2);margin-bottom:4px;">${formula}${mw ? ` &nbsp;·&nbsp; <span style="color:var(--ink3);">MW ${mw} Da</span>` : ''}</div>` : ''}
         ${iupac ? `<div style="font-size:11px;color:var(--ink4);font-family:'IBM Plex Mono',monospace;line-height:1.5;margin-top:6px;max-width:520px;">${iupac}</div>` : ''}
-        <div style="display:flex;gap:10px;margin-top:14px;flex-wrap:wrap;">
-          ${cid ? `<a href="https://pubchem.ncbi.nlm.nih.gov/compound/${cid}" target="_blank"
-            style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--blue);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--blue-border);border-radius:4px;background:var(--blue-bg);">PubChem CID ${cid} ↗</a>` : ''}
-          ${chemblId ? `<a href="https://www.ebi.ac.uk/chembl/compound_report_card/${chemblId}" target="_blank"
-            style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--green);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--green-border);border-radius:4px;background:var(--green-bg);">${chemblId} ↗</a>` : ''}
-        </div>
+        ${cid ? `<div style="margin-top:14px;">
+          <a href="https://pubchem.ncbi.nlm.nih.gov/compound/${cid}" target="_blank"
+            style="font-family:'IBM Plex Mono',monospace;font-size:9px;color:var(--blue);text-decoration:none;font-weight:600;padding:3px 9px;border:1px solid var(--blue-border);border-radius:4px;background:var(--blue-bg);">PubChem CID ${cid} ↗</a>
+        </div>` : ''}
       </div>
     </div>`;
 }

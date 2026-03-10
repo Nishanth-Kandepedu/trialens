@@ -218,10 +218,17 @@ def fetch_trials(compound):
         # Eligibility — age, sex, key criteria
         elig = p.get("eligibilityModule", {})
         elig = elig if isinstance(elig, dict) else {}
+        def clean_age(v):
+            import re
+            v = str(v or "").strip()
+            # Keep only age-like strings: "18 Years", "N/A", etc.
+            if re.match(r'^[\w\s]+$', v) and len(v) < 30:
+                return v
+            return ""
         eligibility = {
-            "minAge":   elig.get("minimumAge",""),
-            "maxAge":   elig.get("maximumAge",""),
-            "sex":      elig.get("sex",""),
+            "minAge":   clean_age(elig.get("minimumAge","")),
+            "maxAge":   clean_age(elig.get("maximumAge","")),
+            "sex":      str(elig.get("sex","")).strip()[:20],
             "criteria": clean_nct_text(elig.get("eligibilityCriteria") or "", 600),
         }
 
@@ -779,13 +786,21 @@ class Handler(BaseHTTPRequestHandler):
             return
 
         if path == "/api/structure":
-            # Proxy ChEMBL structure image to avoid browser CORS issues
             qs = urlparse(self.path).query
             params = urllib.parse.parse_qs(qs)
-            chembl_id = params.get("chembl_id", [None])[0]
+            compound_name = params.get("compound", [None])[0]
             cid = params.get("cid", [None])[0]
             img_bytes = None
             content_type = "image/png"
+            # Resolve ChEMBL ID from compound name using existing robust lookup
+            if compound_name:
+                try:
+                    chembl_id, _ = resolve_chembl_id(compound_name)
+                except Exception:
+                    chembl_id = ""
+            else:
+                chembl_id = ""
+            # Try ChEMBL image first
             if chembl_id:
                 try:
                     url = f"https://www.ebi.ac.uk/chembl/api/data/image/{chembl_id}?engine=indigo"
@@ -794,8 +809,10 @@ class Handler(BaseHTTPRequestHandler):
                         img_bytes = r.read()
                         ct = r.headers.get("Content-Type", "image/png")
                         content_type = ct.split(";")[0].strip()
+                    print(f"[Structure] ChEMBL {chembl_id} OK ({len(img_bytes)} bytes)", flush=True)
                 except Exception as e:
-                    print(f"[Structure] ChEMBL fetch failed: {e}", flush=True)
+                    print(f"[Structure] ChEMBL failed: {e}", flush=True)
+            # Fallback to PubChem
             if not img_bytes and cid:
                 try:
                     url = f"https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/cid/{cid}/PNG?image_size=300x200"
@@ -803,8 +820,9 @@ class Handler(BaseHTTPRequestHandler):
                     with urllib.request.urlopen(req, timeout=8) as r:
                         img_bytes = r.read()
                         content_type = "image/png"
+                    print(f"[Structure] PubChem CID {cid} OK", flush=True)
                 except Exception as e:
-                    print(f"[Structure] PubChem fetch failed: {e}", flush=True)
+                    print(f"[Structure] PubChem failed: {e}", flush=True)
             if img_bytes:
                 self.send_response(200)
                 self.send_header("Content-Type", content_type)
