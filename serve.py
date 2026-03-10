@@ -536,31 +536,56 @@ def fetch_real_sar_data(compound):
             except Exception:
                 pass
 
-            # In vivo efficacy assays (assay_type=F — functional/animal models)
+            # In vivo efficacy — assay_type=F filtered to genuine animal model assays
+            # Exclude: pure in vitro functional (cell-free, cell-based IC50/EC50/Ki)
+            # Include: whole-animal endpoints — PK, tumour, behavioural, physiological
+            IN_VIVO_TYPES = {
+                'ED50','AUC','AUCINF','AUC0-INF','AUC0-T','CMAX','TMAX','T1/2','THALF',
+                'CL','VD','VDSS','MED','MTD','LD50','TGI','% TGI','% INHIBITION',
+                'TUMOR VOLUME','BODY WEIGHT','SURVIVAL','% SURVIVAL','ID50',
+                'EFFICACY','IN VIVO IC50','IN VIVO EC50','MPE','ANALGESIA',
+                'ANTI-TUMOR','ANTITUMOR','% TUMOR INHIBITION',
+            }
+            IN_VIVO_DESC_MARKERS = [
+                'in vivo','animal model','xenograft','tumor','tumour','mouse model',
+                'rat model','oral','i.v.','intravenous','i.p.','subcutaneous',
+                'pharmacokinetic','pk study','bioavailability','plasma','blood',
+                'dose-response in','efficacy in','treated mice','treated rats',
+            ]
             try:
-                invivo_url = f"https://www.ebi.ac.uk/chembl/api/data/activity?molecule_chembl_id={chembl_id}&assay_type=F&format=json&limit=200&order_by=pchembl_value"
+                invivo_url = (f"https://www.ebi.ac.uk/chembl/api/data/activity"
+                              f"?molecule_chembl_id={chembl_id}&assay_type=F"
+                              f"&format=json&limit=500")
                 invivo_data = http_get(invivo_url)
                 result["invivo_data"] = []
                 for a in invivo_data.get("activities", []):
                     val = a.get("standard_value")
-                    atype = a.get("standard_type", "")
-                    if val and atype:
-                        raw_sp = (a.get("target_organism") or a.get("assay_organism") or "").strip()
-                        species = norm_species(raw_sp) or species_from_desc(
-                            a.get("assay_description"), a.get("target_pref_name"))
-                        pchembl = a.get("pchembl_value")
-                        result["invivo_data"].append({
-                            "type":          atype,
-                            "value":         val,
-                            "unit":          a.get("standard_units", ""),
-                            "pchembl_value": float(pchembl) if pchembl else None,
-                            "assay":         (a.get("assay_description") or "")[:120],
-                            "target":        (a.get("target_pref_name") or "")[:80],
-                            "species":       species,
-                            "reference":     a.get("document_chembl_id", ""),
-                            "source":        "ChEMBL",
-                            "assay_category":"in_vivo"
-                        })
+                    atype = (a.get("standard_type") or "").strip().upper()
+                    if not val or not atype:
+                        continue
+                    desc = (a.get("assay_description") or "").lower()
+                    # Accept if: endpoint is a known in vivo type, OR description has in vivo marker
+                    is_invivo_type = atype in IN_VIVO_TYPES or any(atype.startswith(t) for t in IN_VIVO_TYPES)
+                    is_invivo_desc = any(m in desc for m in IN_VIVO_DESC_MARKERS)
+                    # Reject pure in vitro binding endpoints unless desc confirms in vivo
+                    is_vitro_binding = atype in {'IC50','EC50','KI','KD','GI50','MIC','CC50','AC50'} and not is_invivo_desc
+                    if not (is_invivo_type or is_invivo_desc) or is_vitro_binding:
+                        continue
+                    raw_sp = (a.get("assay_organism") or a.get("target_organism") or "").strip()
+                    species = norm_species(raw_sp) or species_from_desc(desc)
+                    pchembl = a.get("pchembl_value")
+                    result["invivo_data"].append({
+                        "type":          a.get("standard_type", atype),
+                        "value":         val,
+                        "unit":          a.get("standard_units", ""),
+                        "pchembl_value": float(pchembl) if pchembl else None,
+                        "assay":         (a.get("assay_description") or "")[:120],
+                        "target":        (a.get("target_pref_name") or "")[:80],
+                        "species":       species,
+                        "reference":     a.get("document_chembl_id", ""),
+                        "source":        "ChEMBL",
+                        "assay_category":"in_vivo"
+                    })
                 print(f"[ChEMBL] in vivo records: {len(result['invivo_data'])}", flush=True)
             except Exception as e:
                 result["invivo_error"] = str(e)
