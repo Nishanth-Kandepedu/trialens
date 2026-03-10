@@ -1147,13 +1147,14 @@ Return ONLY valid JSON.`,
     };
     compoundSarCache = sar;
 
-    // Upgrade structure panel with ChEMBL SVG now that we have the ID
-    if (realData.chembl_id && window._structureCID) {
+    // Upgrade structure panel with ChEMBL SVG — use SAR-resolved ID or early-fetched one
+    const chId = realData.chembl_id || window._structureChemblIdEarly;
+    if (chId && window._structureCID) {
       renderStructurePanel(
         currentCompound,
         window._structureCID,
-        { MolecularFormula: '', IUPACName: '', MolecularWeight: '' },
-        realData.chembl_id
+        window._structureProps || {},
+        chId
       );
     }
 
@@ -2536,7 +2537,7 @@ async function renderCompoundStructure(compound) {
   panel.innerHTML = '';
 
   try {
-    // Resolve CID + properties from PubChem
+    // Resolve PubChem CID + properties
     const cidRes = await fetch(`https://pubchem.ncbi.nlm.nih.gov/rest/pug/compound/name/${encodeURIComponent(compound)}/cids/JSON`);
     if (!cidRes.ok) return;
     const cidData = await cidRes.json();
@@ -2547,11 +2548,22 @@ async function renderCompoundStructure(compound) {
     const propData = propRes.ok ? await propRes.json() : null;
     const props = propData?.PropertyTable?.Properties?.[0] || {};
 
-    // Store cid globally so download can embed structure
     window._structureCID = cid;
+    window._structureProps = props;
     window._structureCompound = compound;
 
-    renderStructurePanel(compound, cid, props, null);
+    // Fetch ChEMBL ID immediately so we use ChEMBL SVG from the start
+    let chemblId = null;
+    try {
+      const chRes = await fetch(`https://www.ebi.ac.uk/chembl/api/data/molecule?pref_name__iexact=${encodeURIComponent(compound)}&format=json&limit=1`);
+      if (chRes.ok) {
+        const chData = await chRes.json();
+        chemblId = chData?.molecules?.[0]?.molecule_chembl_id || null;
+      }
+    } catch(e) { /* fall through to PubChem */ }
+
+    window._structureChemblIdEarly = chemblId;
+    renderStructurePanel(compound, cid, props, chemblId);
   } catch(e) { /* silent fail */ }
 }
 
